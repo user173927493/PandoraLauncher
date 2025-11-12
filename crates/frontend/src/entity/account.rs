@@ -14,7 +14,7 @@ pub struct AccountEntries {
 impl AccountEntries {
     pub fn set<C: AppContext>(entity: &Entity<Self>, accounts: Arc<[Account]>, selected_account: Option<Uuid>, cx: &mut C) {
         entity.update(cx, |entries, cx| {
-            entries.selected_account = selected_account.and_then(|uuid| accounts.iter().find(|acc| acc.uuid == uuid).map(Account::clone));
+            entries.selected_account = selected_account.and_then(|uuid| accounts.iter().find(|acc| acc.uuid == uuid).cloned());
             entries.accounts = accounts;
             entries.selected_account_uuid = selected_account;
             cx.notify();

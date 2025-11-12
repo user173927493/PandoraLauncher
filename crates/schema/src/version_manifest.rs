@@ -2,7 +2,7 @@ use chrono::{DateTime, Utc};
 use serde::Deserialize;
 use ustr::Ustr;
 
-pub const MOJANG_VERSION_MANIFEST_URL: &'static str = "https://piston-meta.mojang.com/mc/game/version_manifest_v2.json";
+pub const MOJANG_VERSION_MANIFEST_URL: &str = "https://piston-meta.mojang.com/mc/game/version_manifest_v2.json";
 
 #[derive(Deserialize, Clone, Debug)]
 #[cfg_attr(debug_assertions, serde(deny_unknown_fields))]

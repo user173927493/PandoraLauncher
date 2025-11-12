@@ -30,7 +30,7 @@ impl VersionEntries {
     }
 
     pub fn load_if_missing(&self) {
-        if self.sent_initial_load.swap(true, Ordering::Relaxed) == false {
+        if !self.sent_initial_load.swap(true, Ordering::Relaxed) {
             self.backend_handle.blocking_send(MessageToBackend::LoadVersionManifest {
                 reload: false
             });
@@ -38,7 +38,7 @@ impl VersionEntries {
     }
 
     pub fn reload(&self) {
-        if self.pending_reload.swap(true, Ordering::Relaxed) == false {
+        if !self.pending_reload.swap(true, Ordering::Relaxed) {
             self.sent_initial_load.store(true, Ordering::Relaxed);
 
             self.backend_handle.blocking_send(MessageToBackend::LoadVersionManifest {

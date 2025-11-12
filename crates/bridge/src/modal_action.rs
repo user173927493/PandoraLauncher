@@ -20,7 +20,7 @@ impl Deref for ModalAction {
     type Target = ModalActionInner;
 
     fn deref(&self) -> &Self::Target {
-        &*self.inner
+        &self.inner
     }
 }
 

@@ -18,6 +18,12 @@ pub struct ProgressBar {
     pub color: ProgressBarColor
 }
 
+impl Default for ProgressBar {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ProgressBar {
     pub fn new() -> Self {
         Self {

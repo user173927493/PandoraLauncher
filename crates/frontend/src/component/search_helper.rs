@@ -78,11 +78,10 @@ impl <T> SearchHelper<T> {
             self.searched_starts_with.retain(|i| {
                 let key = &self.lower_keys[*i];
                 if !key.starts_with(query) {
-                    if key.contains(query) {
-                        if let Err(insert_at) = self.searched_contains.binary_search(i) {
+                    if key.contains(query)
+                        && let Err(insert_at) = self.searched_contains.binary_search(i) {
                             self.searched_contains.insert(insert_at, *i);
                         }
-                    }
                     false
                 } else {
                     true

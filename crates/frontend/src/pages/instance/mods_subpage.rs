@@ -25,8 +25,8 @@ impl InstanceModsSubpage {
         let mods_list_delegate = ModsListDelegate {
             id: instance_id,
             backend_handle: backend_handle.clone(),
-            mods: (&*instance.mods.read(cx)).to_vec(),
-            searched: (&*instance.mods.read(cx)).to_vec(),
+            mods: instance.mods.read(cx).to_vec(),
+            searched: instance.mods.read(cx).to_vec(),
             confirming_delete: Arc::new(AtomicUsize::new(0))
         };
         
@@ -34,7 +34,7 @@ impl InstanceModsSubpage {
         
         let mod_list = cx.new(move |cx| {
             cx.observe(&mods, |list: &mut ListState<ModsListDelegate>, mods, cx| {
-                let mods = (&*mods.read(cx)).to_vec();
+                let mods = mods.read(cx).to_vec();
                 let delegate = list.delegate_mut();
                 delegate.mods = mods.clone();
                 delegate.searched = mods;

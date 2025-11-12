@@ -38,7 +38,7 @@ pub fn start(send: FrontendHandle, self_handle: BackendHandle, recv: Receiver<Me
     let modrinth_data = ModrinthData::new(http_client.clone(), send.clone());
     
     let mut account_info = load_accounts_json(&directories);
-    for (_, account) in &mut account_info.accounts {
+    for account in account_info.accounts.values_mut() {
         account.try_load_head_32x_from_head();
     }
     
@@ -183,27 +183,24 @@ impl BackendState {
     }
     
     pub async fn remove_instance(&mut self, id: InstanceID) {
-        if let Some(instance) = self.instances.get(id.index) {
-            if instance.id == id {
+        if let Some(instance) = self.instances.get(id.index)
+            && instance.id == id {
                 let instance = self.instances.remove(id.index);
                 self.send.send(MessageToFrontend::InstanceRemoved { id }).await;
                 self.send.send_info(format!("Instance '{}' removed", instance.name)).await;
             }
-        }
     }
     
     pub async fn load_instance_from_path(&mut self, path: &Path, mut show_errors: bool, show_success: bool) -> bool {
         let instance = Instance::load_from_folder(&path).await;
         let Ok(mut instance) = instance else {
-            if let Some(existing) = self.instance_by_path.get(path) {
-                if let Some(existing_instance) = self.instances.get(existing.index) {
-                    if existing_instance.id == *existing {
+            if let Some(existing) = self.instance_by_path.get(path)
+                && let Some(existing_instance) = self.instances.get(existing.index)
+                    && existing_instance.id == *existing {
                         let instance = self.instances.remove(existing.index);
                         self.send.send(MessageToFrontend::InstanceRemoved { id: instance.id}).await;
                         show_errors = true;
                     }
-                }
-            }
             
             if show_errors {
                 let error = instance.unwrap_err();
@@ -214,9 +211,9 @@ impl BackendState {
             return false;
         };
         
-        if let Some(existing) = self.instance_by_path.get(path) {
-            if let Some(existing_instance) = self.instances.get_mut(existing.index) {
-                if existing_instance.id == *existing {
+        if let Some(existing) = self.instance_by_path.get(path)
+            && let Some(existing_instance) = self.instances.get_mut(existing.index)
+                && existing_instance.id == *existing {
                     existing_instance.copy_basic_attributes_from(instance);
                     
                     let _ = self.send.send(existing_instance.create_modify_message()).await;
@@ -227,8 +224,6 @@ impl BackendState {
                     
                     return true;
                 }
-            }
-        }
         
         let vacant = self.instances.vacant_entry();
         let instance_id = InstanceID {
@@ -242,8 +237,8 @@ impl BackendState {
         }
         let message = MessageToFrontend::InstanceAdded {
             id: instance_id,
-            name: instance.name.clone(),
-            version: instance.version.clone(),
+            name: instance.name,
+            version: instance.version,
             loader: instance.loader,
             worlds_state: Arc::clone(&instance.worlds_state),
             servers_state: Arc::clone(&instance.servers_state),
@@ -256,7 +251,7 @@ impl BackendState {
         self.instance_by_path.insert(path.to_owned(), instance_id);
         
         self.watch_filesystem(path, WatchTarget::InstanceDir { id: instance_id }).await;
-        return true;
+        true
     }
     
     async fn handle(mut self) {
@@ -296,12 +291,11 @@ impl BackendState {
         self.modrinth_data.expire().await;
         
         for (_, instance) in &mut self.instances {
-            if let Some(child) = &mut instance.child {
-                if !matches!(child.try_wait(), Ok(None)) {
+            if let Some(child) = &mut instance.child
+                && !matches!(child.try_wait(), Ok(None)) {
                     instance.child = None;
                     self.send.send(instance.create_modify_message()).await;
                 }
-            }
         }
     }
     
@@ -491,11 +485,10 @@ impl BackendState {
     
     pub async fn write_account_info(&mut self) {
         // Check that accounts_json can be loaded before backing it up
-        if let Ok(file) = std::fs::File::open(&self.directories.accounts_json) {
-            if let Ok(_) = serde_json::from_reader::<_, BackendAccountInfo>(file) {
+        if let Ok(file) = std::fs::File::open(&self.directories.accounts_json)
+            && serde_json::from_reader::<_, BackendAccountInfo>(file).is_ok() {
                 let _ = std::fs::rename(&self.directories.accounts_json, &self.directories.accounts_json_backup);
             }
-        }
         
         let Ok(file) = std::fs::File::create(&self.directories.accounts_json) else {
             return;
@@ -507,7 +500,7 @@ impl BackendState {
     }
     
     pub fn update_profile_head(&self, profile: &MinecraftProfileResponse) {
-        let Some(skin) = profile.skins.iter().filter(|skin| skin.state == SkinState::Active).cloned().next() else {
+        let Some(skin) = profile.skins.iter().find(|skin| skin.state == SkinState::Active).cloned() else {
             return;
         };
         
@@ -521,7 +514,7 @@ impl BackendState {
             let Ok(bytes) = response.bytes().await else {
                 return;
             };
-            let Ok(mut image) = image::load_from_memory(&*bytes) else {
+            let Ok(mut image) = image::load_from_memory(&bytes) else {
                 return;
             };
             
@@ -559,17 +552,15 @@ impl BackendState {
 }
 
 fn load_accounts_json(directories: &LauncherDirectories) -> BackendAccountInfo {
-    if let Ok(file) = std::fs::File::open(&directories.accounts_json) {
-        if let Ok(account_info) = serde_json::from_reader(file) {
+    if let Ok(file) = std::fs::File::open(&directories.accounts_json)
+        && let Ok(account_info) = serde_json::from_reader(file) {
             return account_info;
         }
-    }
     
-    if let Ok(file) = std::fs::File::open(&directories.accounts_json_backup) {
-        if let Ok(account_info) = serde_json::from_reader(file) {
+    if let Ok(file) = std::fs::File::open(&directories.accounts_json_backup)
+        && let Ok(account_info) = serde_json::from_reader(file) {
             return account_info;
         }
-    }
     
     BackendAccountInfo::default()
 }

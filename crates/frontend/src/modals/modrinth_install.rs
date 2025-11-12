@@ -75,7 +75,7 @@ impl InstallDialogLoading {
         let project_versions = self.project_versions.read(cx);
         match project_versions {
             FrontendModrinthDataState::Loading => {
-                return modal.child(h_flex().gap_2().child("Loading versions...").child(Spinner::new()));
+                modal.child(h_flex().gap_2().child("Loading versions...").child(Spinner::new()))
             },
             FrontendModrinthDataState::Loaded { result, .. } => {
                 match result {
@@ -93,11 +93,10 @@ impl InstallDialogLoading {
                             if version.files.is_empty() {
                                 continue;
                             }
-                            if let Some(status) = version.status {
-                                if !matches!(status, ModrinthVersionStatus::Listed | ModrinthVersionStatus::Archived) {
+                            if let Some(status) = version.status
+                                && !matches!(status, ModrinthVersionStatus::Listed | ModrinthVersionStatus::Archived) {
                                     continue;
                                 }
-                            }
                             
                             let mut loaders = EnumSet::from_iter(loaders.iter().copied());
                             loaders.remove(ModrinthLoader::Unknown);
@@ -142,7 +141,7 @@ impl InstallDialogLoading {
                         }).collect();
                         
                         let unsupported_instances = instance_entries.read(cx).entries.len().saturating_sub(entries.len());
-                        let instances = if entries.len() > 0 {
+                        let instances = if !entries.is_empty() {
                             let dropdown = InstanceDropdown::create(entries, window, cx);
                             dropdown.update(cx, |dropdown, cx| dropdown.set_selected_index(Some(IndexPath::default()), window, cx));
                             Some(dropdown)
@@ -171,13 +170,13 @@ impl InstallDialogLoading {
                         };
                         install_dialog.show(window, cx);
                         
-                        return modal.child(h_flex().gap_2().child("Loading mod versions...").child(Spinner::new()));
+                        modal.child(h_flex().gap_2().child("Loading mod versions...").child(Spinner::new()))
                     },
                     Ok(_) => {
-                        return modal.child(h_flex().child(ErrorAlert::new(0, "Error loading mod versions".into(), "Wrong result! Pandora bug!".into())));
+                        modal.child(h_flex().child(ErrorAlert::new(0, "Error loading mod versions".into(), "Wrong result! Pandora bug!".into())))
                     }
                     Err(error) => {
-                        return modal.child(h_flex().child(ErrorAlert::new(0, "Error loading mod versions".into(), format!("{}", error).into())));
+                        modal.child(h_flex().child(ErrorAlert::new(0, "Error loading mod versions".into(), format!("{}", error).into())))
                     },
                 }
             },
@@ -237,11 +236,10 @@ impl InstallDialog {
                                 .on_click(cx.listener(move |this, _, _, _| {
                                     this.target = Some(InstallTarget::Instance(instance.id));
                                     this.fixed_minecraft_version = Some(instance.version.clone());
-                                    if this.content_type == ContentType::Mod || this.content_type == ContentType::Modpack {
-                                        if instance.loader != Loader::Vanilla {
+                                    if (this.content_type == ContentType::Mod || this.content_type == ContentType::Modpack)
+                                        && instance.loader != Loader::Vanilla {
                                             this.fixed_loader = Some(instance.loader.as_modrinth_loader());
                                         }
-                                    }
                                 })
                             ))
                         });
@@ -299,15 +297,15 @@ impl InstallDialog {
             self.last_selected_minecraft_version = selected_minecraft_version.clone();
             self.skip_loader_check_for_mod_version = false;
             
-            if let Some(loader) = self.fixed_loader.clone() {
+            if let Some(loader) = self.fixed_loader {
                 let loader = SharedString::new_static(loader.name());
                 self.loader_select_state = Some(cx.new(|cx| {
                     let mut select_state = SelectState::new(vec![loader], None, window, cx);
                     select_state.set_selected_index(Some(IndexPath::default()), window, cx);
                     select_state
                 }));
-            } else if let Some(selected_minecraft_version) = selected_minecraft_version.clone() {
-                if let Some(loaders) = self.version_matrix.get(selected_minecraft_version.as_str()) {
+            } else if let Some(selected_minecraft_version) = selected_minecraft_version.clone()
+                && let Some(loaders) = self.version_matrix.get(selected_minecraft_version.as_str()) {
                     if loaders.same_loaders_for_all_versions {
                         let single_loader = if loaders.loaders.len() == 1 {
                             SharedString::new_static(loaders.loaders.iter().next().unwrap().name())
@@ -347,7 +345,6 @@ impl InstallDialog {
                         }));
                     }
                 }
-            }
             if self.loader_select_state.is_none() {
                 self.loader_select_state = Some(cx.new(|cx| {
                     let mut select_state = SelectState::new(Vec::new(), None, window, cx);
@@ -361,8 +358,8 @@ impl InstallDialog {
         let loader_changed = self.last_selected_loader != selected_loader;
         self.last_selected_loader = selected_loader.clone();
         
-        if self.mod_version_select_state.is_none() || game_version_changed || loader_changed {
-            if let Some(selected_game_version) = selected_minecraft_version && let Some(selected_loader) = self.last_selected_loader.clone() {
+        if (self.mod_version_select_state.is_none() || game_version_changed || loader_changed)
+            && let Some(selected_game_version) = selected_minecraft_version && let Some(selected_loader) = self.last_selected_loader.clone() {
                 let selected_game_version = selected_game_version.as_str();
                 
                 let selected_loader = if self.skip_loader_check_for_mod_version {
@@ -383,7 +380,7 @@ impl InstallDialog {
                     }
                     let matches_game_version = game_versions.iter().any(|v| v.as_str() == selected_game_version);
                     let matches_loader = if let Some(selected_loader) = selected_loader {
-                        loaders.iter().any(|v| *v == selected_loader)
+                        loaders.contains(&selected_loader)
                     } else {
                         true
                     };
@@ -440,7 +437,6 @@ impl InstallDialog {
                     select_state
                 }));
             }
-        }
         
         let selected_mod_version = self.mod_version_select_state.as_ref().and_then(|state| state.read(cx).selected_value()).cloned();
         

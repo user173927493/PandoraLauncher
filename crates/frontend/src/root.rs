@@ -20,7 +20,7 @@ pub struct LauncherRoot {
 
 impl LauncherRoot {
     pub fn new(data: &DataEntities, panic_message: Arc<RwLock<Option<String>>>, window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let launcher_ui = cx.new(|cx| LauncherUI::new(&data, window, cx));
+        let launcher_ui = cx.new(|cx| LauncherUI::new(data, window, cx));
         
         Self {
             ui: launcher_ui,
@@ -75,6 +75,6 @@ pub fn start_install(content_install: ContentInstall, backend_handle: &BackendHa
         modal_action: modal_action.clone(),
     });
     
-    let title: SharedString = format!("Installing...").into();
+    let title: SharedString = "Installing...".to_string().into();
     modals::generic::show_modal(window, cx, title, "Error installing content".into(), modal_action);
 }

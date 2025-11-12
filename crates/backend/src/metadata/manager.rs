@@ -37,7 +37,7 @@ pub trait MetadataItem {
     type T: DeserializeOwned + Send + Sync + 'static;
 
     fn url(&self) -> Ustr;
-    fn state<'a>(&self, states: &'a MetadataManagerStates) -> MetaLoadStateWrapper<Self::T>;
+    fn state(&self, states: &MetadataManagerStates) -> MetaLoadStateWrapper<Self::T>;
     fn cache_file(&self, _metadata_manager: &MetadataManager) -> impl AsRef<Path> + Send + Sync + 'static;
     fn data_hash(&self) -> Option<Ustr> {
         None
@@ -60,14 +60,12 @@ impl MetadataItem for MinecraftVersionManifestMetadata {
         Arc::clone(&metadata_manager.version_manifest_cache)
     }
 
-    fn state<'a>(&self, states: &'a MetadataManagerStates) -> MetaLoadStateWrapper<Self::T> {
+    fn state(&self, states: &MetadataManagerStates) -> MetaLoadStateWrapper<Self::T> {
         states.minecraft_version_manifest.clone()
     }
 
-    fn try_send_to_backend(value: Result<Arc<Self::T>, MetaLoadError>, sender: FrontendHandle) -> impl std::future::Future<Output = ()> + Send {
-        async move {
-            let _ = sender.send(MessageToFrontend::VersionManifestUpdated(value.map_err(|err| format!("{}", err).into()))).await;
-        }
+    async fn try_send_to_backend(value: Result<Arc<Self::T>, MetaLoadError>, sender: FrontendHandle) {
+        let _ = sender.send(MessageToFrontend::VersionManifestUpdated(value.map_err(|err| format!("{}", err).into()))).await;
     }
 }
 
@@ -84,7 +82,7 @@ impl MetadataItem for MojangJavaRuntimesMetadata {
         Arc::clone(&metadata_manager.mojang_java_runtimes_cache)
     }
 
-    fn state<'a>(&self, states: &'a MetadataManagerStates) -> MetaLoadStateWrapper<Self::T> {
+    fn state(&self, states: &MetadataManagerStates) -> MetaLoadStateWrapper<Self::T> {
         states.mojang_java_runtimes.clone()
     }
 }
@@ -102,7 +100,7 @@ impl <'v> MetadataItem for MinecraftVersionMetadata<'v> {
         Some(self.0.sha1)
     }
 
-    fn cache_file<'a>(&'a self, metadata_manager: &MetadataManager) -> impl AsRef<Path> + Send + Sync + 'static {
+    fn cache_file(&self, metadata_manager: &MetadataManager) -> impl AsRef<Path> + Send + Sync + 'static {
         if !crate::is_single_component_path(&self.0.sha1) {
             panic!("Invalid sha1 {}, possible directory traversal attack?", self.0.sha1);
         }
@@ -111,7 +109,7 @@ impl <'v> MetadataItem for MinecraftVersionMetadata<'v> {
         path
     }
 
-    fn state<'a>(&self, states: &'a MetadataManagerStates) -> MetaLoadStateWrapper<Self::T> {
+    fn state(&self, states: &MetadataManagerStates) -> MetaLoadStateWrapper<Self::T> {
         let url = self.url();
         if let Some(item) = states.version_info.read().unwrap().get(&url) {
             item.clone()
@@ -135,7 +133,7 @@ impl MetadataItem for AssetsIndexMetadata {
         self.url
     }
 
-    fn state<'a>(&self, states: &'a MetadataManagerStates) -> MetaLoadStateWrapper<Self::T> {
+    fn state(&self, states: &MetadataManagerStates) -> MetaLoadStateWrapper<Self::T> {
         let url = self.url();
         if let Some(item) = states.assets_index.read().unwrap().get(&url) {
             item.clone()
@@ -167,7 +165,7 @@ impl MetadataItem for MojangJavaRuntimeComponentMetadata {
         self.url
     }
 
-    fn state<'a>(&self, states: &'a MetadataManagerStates) -> MetaLoadStateWrapper<Self::T> {
+    fn state(&self, states: &MetadataManagerStates) -> MetaLoadStateWrapper<Self::T> {
         let url = self.url();
         if let Some(item) = states.java_runtime_manifests.read().unwrap().get(&url) {
             item.clone()
@@ -177,7 +175,7 @@ impl MetadataItem for MojangJavaRuntimeComponentMetadata {
         }
     }
 
-    fn cache_file<'a>(&'a self, _: &MetadataManager) -> impl AsRef<Path> + Send + Sync + 'static {
+    fn cache_file(&self, _: &MetadataManager) -> impl AsRef<Path> + Send + Sync + 'static {
         Arc::clone(&self.cache)
     }
     
@@ -195,11 +193,11 @@ impl MetadataItem for FabricLoaderManifestMetadata {
         Ustr::from(FABRIC_LOADER_MANIFEST_URL)
     }
 
-    fn cache_file<'a>(&'a self, metadata_manager: &MetadataManager) -> impl AsRef<Path> + Send + Sync + 'static {
+    fn cache_file(&self, metadata_manager: &MetadataManager) -> impl AsRef<Path> + Send + Sync + 'static {
         Arc::clone(&metadata_manager.fabric_loader_manifest_cache)
     }
 
-    fn state<'a>(&self, states: &'a MetadataManagerStates) -> MetaLoadStateWrapper<Self::T> {
+    fn state(&self, states: &MetadataManagerStates) -> MetaLoadStateWrapper<Self::T> {
         states.fabric_loader_manifest.clone()
     }
 }
@@ -216,15 +214,15 @@ impl MetadataItem for FabricLaunchMetadata {
         format!("https://meta.fabricmc.net/v2/versions/loader/{}/{}", self.minecraft_version, self.loader_version).into()
     }
 
-    fn cache_file<'a>(&'a self, metadata_manager: &MetadataManager) -> impl AsRef<Path> + Send + Sync + 'static {
+    fn cache_file(&self, metadata_manager: &MetadataManager) -> impl AsRef<Path> + Send + Sync + 'static {
         let mut path = metadata_manager.metadata_cache.join("fabric_launch");
         path.push(self.minecraft_version.as_str());
         path.push(self.loader_version.as_str());
         path
     }
 
-    fn state<'a>(&self, states: &'a MetadataManagerStates) -> MetaLoadStateWrapper<Self::T> {
-        let key = (self.minecraft_version.clone(), self.loader_version.clone());
+    fn state(&self, states: &MetadataManagerStates) -> MetaLoadStateWrapper<Self::T> {
+        let key = (self.minecraft_version, self.loader_version);
         if let Some(item) = states.fabric_launch.read().unwrap().get(&key) {
             item.clone()
         } else {
@@ -246,7 +244,7 @@ impl Display for MetaLoadError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::InvalidHash => {
-                return f.write_str("Data did not match expected hash");
+                f.write_str("Data did not match expected hash")
             },
             Self::Reqwest(error) => {
                 if let Some(url) = error.url() {
@@ -269,10 +267,10 @@ impl Display for MetaLoadError {
                     return f.write_str("Unexpected error while constructing request");
                 }
 
-                return f.debug_tuple("Reqwest").field(error).finish();
+                f.debug_tuple("Reqwest").field(error).finish()
             },
             Self::SerdeJson(_) => {
-                return f.write_str("Data was missing or malformed");
+                f.write_str("Data was missing or malformed")
             }
             Self::TokioJoin(error) => f.debug_tuple("TokioJoin").field(error).finish(),
         }
@@ -459,19 +457,19 @@ impl MetadataManager {
                 match result {
                     Ok(value) => {
                         *state = MetaLoadState::Loaded(Arc::clone(&value));
-                        return Ok(value);
+                        Ok(value)
                     },
                     Err(error) => {
                         *state = MetaLoadState::Error(error.clone());
-                        return Err(error);
+                        Err(error)
                     },
                 }
             },
             MetaLoadState::Loaded(value) => {
-                return Ok(Arc::clone(value));
+                Ok(Arc::clone(value))
             },
             MetaLoadState::Error(meta_load_error) => {
-                return Err(meta_load_error.clone())
+                Err(meta_load_error.clone())
             },
         }
     }

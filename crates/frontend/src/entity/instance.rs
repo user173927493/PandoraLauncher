@@ -138,12 +138,10 @@ impl InstanceEntry {
             } else {
                 format!("{} ({:?})", self.name, self.loader)
             }
+        } else if self.loader == Loader::Vanilla {
+            format!("{} ({})", self.name, self.version)
         } else {
-            if self.loader == Loader::Vanilla {
-                format!("{} ({})", self.name, self.version)
-            } else {
-                format!("{} ({:?} {})", self.name, self.loader, self.version)
-            }
+            format!("{} ({:?} {})", self.name, self.loader, self.version)
         }
         
     }

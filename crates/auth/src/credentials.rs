@@ -88,6 +88,6 @@ impl AccountCredentials {
         }
         
         // No valid stage, return initial stage
-        return AuthStageWithData::Initial;
+        AuthStageWithData::Initial
     }
 }

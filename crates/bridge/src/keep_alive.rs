@@ -5,6 +5,12 @@ pub struct KeepAlive {
     alive: Arc<AtomicBool>
 }
 
+impl Default for KeepAlive {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl KeepAlive {
     pub fn new() -> Self {
         Self {

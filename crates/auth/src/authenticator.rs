@@ -156,10 +156,9 @@ impl Authenticator {
             // .set_pkce_verifier(finished.pending.pkce_verifier)
             .request_async(&self.client).await;
         
-        if let Err(RequestTokenError::ServerResponse(ref err)) = token_response {
-            if let BasicErrorResponseType::InvalidGrant = err.error() {
-                return Ok(None);
-            }
+        if let Err(RequestTokenError::ServerResponse(ref err)) = token_response &&
+                let BasicErrorResponseType::InvalidGrant = err.error() {
+            return Ok(None);
         }
         
         let token_response = token_response?;
@@ -275,6 +274,6 @@ impl Authenticator {
         
         let bytes = response.bytes().await?;
         
-        Ok(serde_json::from_slice(&bytes).map_err(|_| XboxAuthenticateError::SerializationError)?)
+        serde_json::from_slice(&bytes).map_err(|_| XboxAuthenticateError::SerializationError)
     }
 }

@@ -47,7 +47,7 @@ impl Launcher {
         launch_tracker.set_total(6);
         
         let version_info = tokio::select! {
-            result = self.create_launch_version(&launch_tracker, instance) => result?,
+            result = self.create_launch_version(launch_tracker, instance) => result?,
             _ = modal_action.request_cancel.cancelled() => {
                 self.sender.send(MessageToFrontend::CloseModal).await;
                 return Err(LaunchError::CancelledByUser);
@@ -83,24 +83,24 @@ impl Launcher {
         let client_download = &version_info.downloads.client;
         artifacts.push(GameLibraryArtifact {
             path: format!("net/minecraft/{}/minecraft-client-{}.jar", instance.version, instance.version).into(),
-            sha1: Some(client_download.sha1.clone()),
+            sha1: Some(client_download.sha1),
             size: Some(client_download.size),
-            url: client_download.url.clone()
+            url: client_download.url
         });
         
         let mojang_java_binary_future =
-            self.load_mojang_java_binary(&self.meta, &http_client, &version_info, &modal_action.trackers, &launch_tracker);
+            self.load_mojang_java_binary(&self.meta, http_client, &version_info, &modal_action.trackers, launch_tracker);
         let load_assets_future =
-            self.load_assets(&self.meta, &http_client, &game_dir, &version_info, &modal_action.trackers, &launch_tracker);
+            self.load_assets(&self.meta, http_client, &game_dir, &version_info, &modal_action.trackers, launch_tracker);
         let load_libraries_future = 
-            self.load_libraries(&http_client, &artifacts, &modal_action.trackers, &launch_tracker);
-        let load_log_configuration = self.load_log_configuration(&http_client, version_info.logging.as_ref());
+            self.load_libraries(http_client, &artifacts, &modal_action.trackers, launch_tracker);
+        let load_log_configuration = self.load_log_configuration(http_client, version_info.logging.as_ref());
 
         let joined = futures::future::try_join4(
             mojang_java_binary_future.map_err(LaunchError::from),
             load_assets_future.map_err(LaunchError::from),
             load_libraries_future.map_err(LaunchError::from),
-            load_log_configuration.map(|v| Ok(v)),
+            load_log_configuration.map(Ok),
         );
         
         let (java_path, assets_index_name, library_paths, log_configuration) = tokio::select! {
@@ -214,19 +214,19 @@ impl Launcher {
                 
                 let launch_tracker2 = launch_tracker.clone();
                 let meta2 = Arc::clone(&self.meta);
-                let minecraft_version = instance.version.clone();
+                let minecraft_version = instance.version;
                 let fabric_launch = fabric_loader_versions.and_then(async move |loader_manifest| {
                     launch_tracker2.add_count(1);
                     launch_tracker2.notify().await;
                     
-                    let mut latest_loader_version = loader_manifest.0.iter().filter(|v| v.stable).next();
+                    let mut latest_loader_version = loader_manifest.0.iter().find(|v| v.stable);
                     if latest_loader_version.is_none() {
                         latest_loader_version = loader_manifest.0.first();
                     }
                     
                     let value = meta2.fetch(&FabricLaunchMetadata {
                         minecraft_version,
-                        loader_version: latest_loader_version.unwrap().version.clone(),
+                        loader_version: latest_loader_version.unwrap().version,
                     }).await?;
                     
                     launch_tracker2.add_count(1);
@@ -274,7 +274,7 @@ impl Launcher {
                             }),
                             classifiers: None,
                         },
-                        name: loader.maven.clone(),
+                        name: loader.maven,
                         rules: None,
                         natives: None,
                         extract: None
@@ -294,7 +294,7 @@ impl Launcher {
                             }),
                             classifiers: None,
                         },
-                        name: intermediary.maven.clone(),
+                        name: intermediary.maven,
                         rules: None,
                         natives: None,
                         extract: None
@@ -310,19 +310,19 @@ impl Launcher {
                             artifact: Some(GameLibraryArtifact {
                                 url: format!("{}{}", &library.url, &artifact_path).into(),
                                 path: artifact_path.into(),
-                                sha1: Some(library.sha1.clone()),
+                                sha1: Some(library.sha1),
                                 size: Some(library.size),
                             }),
                             classifiers: None,
                         },
-                        name: library.name.clone(),
+                        name: library.name,
                         rules: None,
                         natives: None,
                         extract: None
                     });
                 }
                 
-                version.main_class = fabric_launch.launcher_meta.main_class.client.clone();
+                version.main_class = fabric_launch.launcher_meta.main_class.client;
                 
                 Ok(Arc::new(version))
             },
@@ -388,7 +388,7 @@ impl Launcher {
         progress_trackers.push(java_runtime_tracker.clone());
         java_runtime_tracker.notify().await;
 
-        let result = do_java_runtime_load(&http_client, runtime_component_dir, fresh_install, runtime, &java_runtime_tracker).await;
+        let result = do_java_runtime_load(http_client, runtime_component_dir, fresh_install, runtime, &java_runtime_tracker).await;
 
         java_runtime_tracker.set_finished(result.is_err());
         java_runtime_tracker.notify().await;
@@ -423,7 +423,7 @@ impl Launcher {
             self.directories.assets_objects_dir.clone()
         };
 
-        let result = do_asset_objects_load(&http_client, assets_index, assets_dir, &assets_tracker).await;
+        let result = do_asset_objects_load(http_client, assets_index, assets_dir, &assets_tracker).await;
 
         assets_tracker.set_finished(result.is_err());
         assets_tracker.notify().await;
@@ -442,7 +442,7 @@ impl Launcher {
         progress_trackers.push(libraries_tracker.clone());
         libraries_tracker.notify().await;
 
-        let result = do_libraries_load(&http_client, artifacts, self.directories.libraries_dir.clone(), &libraries_tracker).await;
+        let result = do_libraries_load(http_client, artifacts, self.directories.libraries_dir.clone(), &libraries_tracker).await;
 
         libraries_tracker.set_finished(result.is_err());
         libraries_tracker.notify().await;
@@ -472,7 +472,6 @@ impl Launcher {
             
             let valid_hash_on_disk = {
                 let path = path.clone();
-                let expected_hash = expected_hash.clone();
                 tokio::task::spawn_blocking(move || {
                     crate::check_sha1_hash(&path, expected_hash).unwrap_or(false)
                 }).await.unwrap()
@@ -521,7 +520,7 @@ impl Launcher {
             
             Some(expand_logging_argument(logging.client.argument.as_str(), &path))
         } else {
-            return None;
+            None
         }
     }
 }
@@ -600,7 +599,7 @@ fn expand_logging_argument(argument: &str, path: &Path) -> OsString {
         }
     }
     builder.push(&argument[copied_to_builder..]);
-    return builder;
+    builder
 }
 
 fn calculate_natives_dirname(artifacts: &[GameLibraryArtifact]) -> String {
@@ -611,7 +610,7 @@ fn calculate_natives_dirname(artifacts: &[GameLibraryArtifact]) -> String {
         let Some(sha1) = &artifact.sha1 else {
             continue;
         };
-        if let Ok(_) = hex::decode_to_slice(sha1.as_str(), &mut hash) {
+        if hex::decode_to_slice(sha1.as_str(), &mut hash).is_ok() {
             hashes.insert(hash);
         }
     }
@@ -691,7 +690,6 @@ async fn do_java_runtime_load(http_client: &reqwest::Client, runtime_component_d
                 let task = async move {
                     let valid_hash_on_disk = {
                         let path = path.clone();
-                        let expected_hash = expected_hash.clone();
                         let permit = disk_semaphore.acquire().await.unwrap();
                         let result = tokio::task::spawn_blocking(move || {
                             crate::check_sha1_hash(&path, expected_hash).unwrap_or(false)
@@ -706,7 +704,8 @@ async fn do_java_runtime_load(http_client: &reqwest::Client, runtime_component_d
                         return Ok(());
                     }
 
-                    if started_downloading.swap(true, std::sync::atomic::Ordering::Relaxed) == false {
+                    let was_downloading = started_downloading.swap(true, std::sync::atomic::Ordering::Relaxed);
+                    if !was_downloading {
                         java_runtime_tracker.set_title(Arc::from("Downloading Java Runtime"));
                     }
 
@@ -727,7 +726,7 @@ async fn do_java_runtime_load(http_client: &reqwest::Client, runtime_component_d
 
                     let decompressed_or_raw = if lzma {
                         let result = tokio::task::spawn_blocking(move || {
-                            lzma::decompress(&*bytes)
+                            lzma::decompress(&bytes)
                         }).await.unwrap();
 
                         match result {
@@ -744,7 +743,7 @@ async fn do_java_runtime_load(http_client: &reqwest::Client, runtime_component_d
 
                     let bytes = match &*decompressed_or_raw {
                         Ok(vec) => vec.as_slice(),
-                        Err(bytes) => &*bytes,
+                        Err(bytes) => bytes,
                     };
                     
                     if bytes.len() != downloads.raw.size as usize {
@@ -756,11 +755,11 @@ async fn do_java_runtime_load(http_client: &reqwest::Client, runtime_component_d
                         tokio::task::spawn_blocking(move || {
                             let bytes = match &*decompressed_or_raw {
                                 Ok(vec) => vec.as_slice(),
-                                Err(bytes) => &*bytes,
+                                Err(bytes) => bytes,
                             };
                             
                             let mut hasher = Sha1::new();
-                            hasher.update(&bytes);
+                            hasher.update(bytes);
                             let actual_hash = hasher.finalize();
                             
                             expected_hash == *actual_hash
@@ -780,7 +779,7 @@ async fn do_java_runtime_load(http_client: &reqwest::Client, runtime_component_d
 
                     java_runtime_tracker.add_count(downloads.raw.size as usize);
                     java_runtime_tracker.notify().await;
-                    return Ok(());
+                    Ok(())
                 };
                 tasks.push(task);
             },
@@ -796,13 +795,11 @@ async fn do_java_runtime_load(http_client: &reqwest::Client, runtime_component_d
 
     if cfg!(unix) {
         for (path, target) in links {
-            if let Some(parent) = path.parent() {
-                if let Ok(absolute_target) = parent.join(target).canonicalize() {
-                    if absolute_target.starts_with(&runtime_component_dir) {
+            if let Some(parent) = path.parent()
+                && let Ok(absolute_target) = parent.join(target).canonicalize()
+                    && absolute_target.starts_with(&runtime_component_dir) {
                         let _ = std::os::unix::fs::symlink(absolute_target, path);
                     }
-                }
-            }
         }
     }
 
@@ -858,7 +855,7 @@ async fn do_asset_objects_load(http_client: &reqwest::Client, assets_index: Arc<
     for (_, asset) in &assets_index.objects {
         let mut expected_hash = [0u8; 20];
         let Ok(_) = hex::decode_to_slice(asset.hash.as_str(), &mut expected_hash) else {
-            return Err(LoadAssetObjectsError::InvalidHash(asset.hash.clone()));
+            return Err(LoadAssetObjectsError::InvalidHash(asset.hash));
         };
 
         let mut path = assets_objects_dir.join(&asset.hash[..2]);
@@ -876,7 +873,6 @@ async fn do_asset_objects_load(http_client: &reqwest::Client, assets_index: Arc<
         let task = async move {
             let valid_hash_on_disk = {
                 let path = path.clone();
-                let expected_hash = expected_hash.clone();
                 let permit = disk_semaphore.acquire().await.unwrap();
                 let result = tokio::task::spawn_blocking(move || {
                     crate::check_sha1_hash(&path, expected_hash).unwrap_or(false)
@@ -891,7 +887,8 @@ async fn do_asset_objects_load(http_client: &reqwest::Client, assets_index: Arc<
                 return Ok(());
             }
 
-            if started_downloading.swap(true, std::sync::atomic::Ordering::Relaxed) == false {
+            let was_downloading = started_downloading.swap(true, std::sync::atomic::Ordering::Relaxed);
+            if !was_downloading {
                 assets_tracker.set_title(Arc::from("Downloading game assets"));
             }
 
@@ -923,7 +920,7 @@ async fn do_asset_objects_load(http_client: &reqwest::Client, assets_index: Arc<
             tokio::fs::write(path.clone(), &*bytes).await?;
             assets_tracker.add_count(asset.size as usize);
             assets_tracker.notify().await;
-            return Ok(());
+            Ok(())
         };
         tasks.push(task);
     }
@@ -931,9 +928,7 @@ async fn do_asset_objects_load(http_client: &reqwest::Client, assets_index: Arc<
     assets_tracker.set_total(total_size as usize);
     assets_tracker.notify().await;
 
-    if let Err(error) = futures::future::try_join_all(tasks).await {
-        return Err(error);
-    }
+    futures::future::try_join_all(tasks).await?;
 
     Ok(())
 }

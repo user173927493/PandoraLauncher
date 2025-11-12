@@ -249,7 +249,7 @@ impl Render for ModrinthSearchPage {
                         
                         let categories = hit.display_categories.iter().flat_map(|categories| {
                             categories.iter().map(|category| {
-                                let icon = icon_for(&*category).unwrap_or("icons/diamond.svg");
+                                let icon = icon_for(category).unwrap_or("icons/diamond.svg");
                                 let icon = Icon::empty().path(icon);
                                 let translated_category = ts!(category.as_str());
                                 h_flex().gap_0p5().child(icon).child(translated_category)

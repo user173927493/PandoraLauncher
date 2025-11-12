@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 
 use sha1::{Digest, Sha1};
 
-const LAUNCH_WRAPPER: &'static [u8] = include_bytes!("../../../wrapper/LaunchWrapper.jar");
+const LAUNCH_WRAPPER: &[u8] = include_bytes!("../../../wrapper/LaunchWrapper.jar");
 
 pub fn create_wrapper(temp_dir: &Path) -> PathBuf {
     let mut hasher = Sha1::new();

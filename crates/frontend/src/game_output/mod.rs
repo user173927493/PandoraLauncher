@@ -70,7 +70,7 @@ impl Default for GameOutput {
                     last_time: None,
                     last_time_millis: 0,
                     thread: HashMap::new(),
-                    item_lines: LruCache::with_hasher(NonZeroUsize::new(1024).unwrap(), FxBuildHasher::default())
+                    item_lines: LruCache::with_hasher(NonZeroUsize::new(1024).unwrap(), FxBuildHasher)
                 },
                 search_query: SharedString::new_static(""),
             }),
@@ -217,11 +217,10 @@ impl GameOutputItem {
             text_style: &TextStyle, line_wrapper: &mut LineWrapperHandle, cache: &'a mut CachedShapedLines) -> &'a [ShapedLine] {
         let mut recompute = true;
         
-        if let Some(last_wrapped) = cache.item_lines.get(&self.index) {
-            if last_wrapped.wrap_width == wrap_width || (last_wrapped.lines.len() == 1 && last_wrapped.lines.first().unwrap().width < wrap_width) {
+        if let Some(last_wrapped) = cache.item_lines.get(&self.index)
+            && (last_wrapped.wrap_width == wrap_width || (last_wrapped.lines.len() == 1 && last_wrapped.lines.first().unwrap().width < wrap_width)) {
                 recompute = false;
             }
-        }
         
         if recompute {
             let mut wrapped = Vec::new();
@@ -307,7 +306,7 @@ impl GameOutputItem {
             });
         }
         
-        return cache.item_lines.get(&self.index).unwrap().lines.as_slice();
+        cache.item_lines.get(&self.index).unwrap().lines.as_slice()
     }
 }
 
@@ -416,7 +415,7 @@ impl Element for GameOutputList {
                         let scroll_render_info = game_output.update_scrolling(line_height, wrap_width,
                             font_size, &text_style, &mut line_wrapper, window.text_system());
                         
-                        if let Some(item_state) = game_output.item_state.as_mut() && item_state.items.len() > 0 {    
+                        if let Some(item_state) = game_output.item_state.as_mut() && !item_state.items.is_empty() {
                             if scroll_render_info.reverse {
                                 paint_lines::<true>(
                                     item_state.items[..scroll_render_info.item+1].iter_mut().rev(),
@@ -510,7 +509,7 @@ impl GameOutput {
                     active_drag.actual_offset = -max_offset;
                 }
                 item_state.last_scrolled_item = item_state.items.len().saturating_sub(1);
-                return ScrollRenderInfo {
+                ScrollRenderInfo {
                     item: item_state.items.len().saturating_sub(1),
                     reverse: true,
                     offset: Pixels::ZERO,
@@ -535,8 +534,8 @@ impl GameOutput {
                         }
                     }
                     
-                    if offset < px(-1.0) {
-                        if let Some(active_drag) = &scroll_state.active_drag {
+                    if offset < px(-1.0)
+                        && let Some(active_drag) = &scroll_state.active_drag {
                             let drag_pivot = active_drag.drag_pivot.min(Pixels::ZERO);
                             let real_pivot = active_drag.real_pivot.min(Pixels::ZERO);
                             let new_max_offset = (item_state.total_line_count * line_height - scroll_state.bounds_y).max(px(1.0));
@@ -548,7 +547,6 @@ impl GameOutput {
                                 effective_offset = offset/drag_pivot*real_pivot;
                             }
                         }
-                    }
                     
                     if let Some(active_drag) = &mut scroll_state.active_drag {
                         active_drag.actual_offset = effective_offset;
@@ -572,7 +570,7 @@ impl GameOutput {
                                 continue;
                             }
                             let lines = item.compute_wrapped_text(wrap_width, text_system,
-                                &self.font, font_size, &text_style, line_wrapper, &mut item_state.cached_shaped_lines);
+                                &self.font, font_size, text_style, line_wrapper, &mut item_state.cached_shaped_lines);
                             let line_count = lines.len().max(1);
                             if line_count != item.total_lines {
                                 resized_above += line_count * line_height - item.total_lines * line_height;
@@ -611,7 +609,7 @@ impl GameOutput {
                                 continue;
                             }
                             let lines = item.compute_wrapped_text(wrap_width, text_system,
-                                &self.font, font_size, &text_style, line_wrapper, &mut item_state.cached_shaped_lines);
+                                &self.font, font_size, text_style, line_wrapper, &mut item_state.cached_shaped_lines);
                             let line_count = lines.len().max(1);
                             if line_count != item.total_lines {
                                 if item.total_lines < line_count {
@@ -629,12 +627,11 @@ impl GameOutput {
                                 break;
                             }
                         }
-                        if changed {
-                            if let Some(active_drag) = &mut scroll_state.active_drag {
+                        if changed
+                            && let Some(active_drag) = &mut scroll_state.active_drag {
                                 active_drag.drag_pivot = offset;
                                 active_drag.real_pivot = effective_offset;
                             }
-                        }
                     }
                     
                     item_state.last_scrolled_item = item_index;
@@ -670,7 +667,7 @@ fn paint_lines<'a, const REVERSE: bool>(
     window: &mut Window,
     cx: &mut App
 ) {
-    let mut text_origin = bounds.origin.clone();
+    let mut text_origin = bounds.origin;
     if REVERSE {
         text_origin.y += bounds.size.height;
         text_origin.y -= line_height;
@@ -684,7 +681,7 @@ fn paint_lines<'a, const REVERSE: bool>(
         let has_highlighted_text = item.highlighted_text.is_some();
         
         let lines = item.compute_wrapped_text(wrap_width, window.text_system(),
-            font, font_size, &text_style, line_wrapper, cache);
+            font, font_size, text_style, line_wrapper, cache);
         
         let line_count = lines.len().max(1);
         
@@ -707,7 +704,7 @@ fn paint_lines<'a, const REVERSE: bool>(
         window.paint_quad(fill(item_bounds,item_background_color));
         */
         
-        let mut line_origin = text_origin.clone();
+        let mut line_origin = text_origin;
         line_origin.x += *time_column_width + *thread_column_width + level_column_width;
         if REVERSE {
             for shaped in lines.iter().rev() {
@@ -763,7 +760,7 @@ fn paint_lines<'a, const REVERSE: bool>(
         }
         
         // Render time text
-        let mut time_origin = text_origin.clone();
+        let mut time_origin = text_origin;
         if REVERSE {
             time_origin.y -= (line_count - 1) * line_height;
         }
@@ -774,7 +771,7 @@ fn paint_lines<'a, const REVERSE: bool>(
         // Shape thread text if needed
         if let ThreadShapedLine::Thread(thread_name) = &item.thread {
             if let Some(cached_thread_line) = cache.thread.get(thread_name) {
-                item.thread = ThreadShapedLine::Shaped(Arc::clone(&cached_thread_line));
+                item.thread = ThreadShapedLine::Shaped(Arc::clone(cached_thread_line));
             } else {
                 let thread_name = thread_name.clone();
                 let mut thread_run = vec![TextRun {
@@ -807,12 +804,12 @@ fn paint_lines<'a, const REVERSE: bool>(
         
         // Render thread text
         if let ThreadShapedLine::Shaped(shaped_thread) = &item.thread {
-            let mut thread_origin = time_origin.clone();
+            let mut thread_origin = time_origin;
             thread_origin.x += *time_column_width + *thread_column_width - shaped_thread.width - font_size/2.0;
             _ = shaped_thread.paint(thread_origin, line_height, window, cx);
         }
         
-        let mut level_origin = time_origin.clone();
+        let mut level_origin = time_origin;
         level_origin.x += *time_column_width + *thread_column_width + level_column_width - item.level.width - font_size/2.0;
         _ = item.level.paint(level_origin, line_height, window, cx);
         

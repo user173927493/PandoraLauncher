@@ -358,7 +358,7 @@ impl <'a> Debug for CompoundRefMut<'a> {
 impl <'a> CompoundRefMut<'a> {
     pub fn as_immutable_ref(&self) -> CompoundRef<'_> {
         CompoundRef {
-            nbt: &self.nbt,
+            nbt: self.nbt,
             node_idx: self.node_idx,
         }
     }

@@ -86,7 +86,7 @@ impl BackendState {
                 }
             },
             MessageToBackend::CreateInstance { name, version, loader } => {
-                if !crate::is_single_component_path(&*name) {
+                if !crate::is_single_component_path(&name) {
                     self.send.send_warning(format!("Unable to create instance, name must not be a path: {}", name)).await;
                     return;
                 }
@@ -94,8 +94,8 @@ impl BackendState {
                     self.send.send_warning(format!("Unable to create instance, name is invalid: {}", name)).await;
                     return;
                 }
-                if self.instances.iter().find(|(_, i)| i.name == name).is_some() {
-                    self.send.send_warning(format!("Unable to create instance, name is already used")).await;
+                if self.instances.iter().any(|(_, i)| i.name == name) {
+                    self.send.send_warning("Unable to create instance, name is already used".to_string()).await;
                     return;
                 }
                 
@@ -106,7 +106,7 @@ impl BackendState {
                 self.watch_filesystem(&self.directories.instances_dir.clone(), WatchTarget::InstancesDir).await;
                 
                 let instance_info = InstanceInfo {
-                    minecraft_version: version.clone(),
+                    minecraft_version: version,
                     loader,
                 };
                 
@@ -114,8 +114,8 @@ impl BackendState {
                 tokio::fs::write(info_path, serde_json::to_string_pretty(&instance_info).unwrap()).await.unwrap();
             },
             MessageToBackend::KillInstance { id } => {
-                if let Some(instance) = self.instances.get_mut(id.index) {
-                    if instance.id == id {
+                if let Some(instance) = self.instances.get_mut(id.index)
+                    && instance.id == id {
                         if let Some(mut child) = instance.child.take() {
                             let result = child.kill();
                             if result.is_err() {
@@ -129,7 +129,6 @@ impl BackendState {
                         }
                         return;
                     }
-                }
                 
                 self.send.send_error("Can't kill instance, unknown id").await;
             }
@@ -268,8 +267,8 @@ impl BackendState {
                 modal_action.set_finished();
             },
             MessageToBackend::SetModEnabled { id, mod_id, enabled } => {
-                if let Some(instance) = self.instances.get_mut(id.index) && instance.id == id {
-                    if let Some(instance_mod) = instance.try_get_mod(mod_id) {
+                if let Some(instance) = self.instances.get_mut(id.index) && instance.id == id
+                    && let Some(instance_mod) = instance.try_get_mod(mod_id) {
                         let Some(file_name) = instance_mod.path.file_name() else {
                             return;
                         };
@@ -295,7 +294,6 @@ impl BackendState {
                         self.reload_mods_immediately.insert(id);
                         let _ = std::fs::rename(&instance_mod.path, new_path);
                     }
-                }
             },
             MessageToBackend::RequestModrinth { request } => {
                 self.modrinth_data.frontend_request(request).await;
@@ -303,7 +301,7 @@ impl BackendState {
             MessageToBackend::UpdateAccountHeadPng { uuid, head_png, head_png_32x } => {
                 if let Some(account) = self.account_info.accounts.get_mut(&uuid) {
                     let head_png = Some(head_png);
-                    if &account.head != &head_png {
+                    if account.head != head_png {
                         account.head = head_png;
                         account.head_32x = Some(head_png_32x);
                         self.send.send(self.account_info.create_update_message()).await;
@@ -318,12 +316,11 @@ impl BackendState {
                 self.install_content(content, modal_action).await;
             },
             MessageToBackend::DeleteMod { id, mod_id } => {
-                if let Some(instance) = self.instances.get_mut(id.index) && instance.id == id {
-                    if let Some(instance_mod) = instance.try_get_mod(mod_id) {
+                if let Some(instance) = self.instances.get_mut(id.index) && instance.id == id
+                    && let Some(instance_mod) = instance.try_get_mod(mod_id) {
                         self.reload_mods_immediately.insert(id);
                         let _ = std::fs::remove_file(&instance_mod.path);
                     }
-                }
             }
         }
     }
@@ -351,7 +348,7 @@ impl BackendState {
             if let Some(arguments) = &version_info.arguments {
                 for argument in arguments.game.iter() {
                     let value = match argument {
-                        LaunchArgument::Single(launch_argument_value) => &launch_argument_value,
+                        LaunchArgument::Single(launch_argument_value) => launch_argument_value,
                         LaunchArgument::Ruled(launch_argument_ruled) => &launch_argument_ruled.value,
                     };
                     match value {

@@ -106,7 +106,7 @@ fn read_compound(snbt: &mut &str, nodes: &mut Slab<NBTNode>) -> anyhow::Result<N
         match children.binary_search(name.as_ref()) {
             Ok(_) => bail!("read_compound: duplicate key"),
             Err(index) => {
-                children.0.insert(index, (name.into(), idx));
+                children.0.insert(index, (name, idx));
             }
         }
 

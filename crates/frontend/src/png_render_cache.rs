@@ -98,7 +98,7 @@ impl PngRenderCache {
             return result.value.clone();
         }
         
-        let result = image::load_from_memory_with_format(&*image, image::ImageFormat::Png).map(|data| {
+        let result = image::load_from_memory_with_format(&image, image::ImageFormat::Png).map(|data| {
             let mut data = data.into_rgba8();
             
             // Convert from RGBA to BGRA.

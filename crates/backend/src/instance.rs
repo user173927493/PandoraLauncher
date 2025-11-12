@@ -250,7 +250,7 @@ impl Instance {
                 
                 count += 1;
                 
-                match load_world_summary(&path) {
+                match load_world_summary(path) {
                     Ok(summary) => {
                         summaries.push(summary);
                     },
@@ -439,7 +439,7 @@ impl Instance {
                 } else {
                     continue;
                 };
-                let Ok(mut file) = std::fs::File::open(&path) else {
+                let Ok(mut file) = std::fs::File::open(path) else {
                     continue;
                 };
                 
@@ -491,9 +491,6 @@ impl Instance {
         }
         
         let info_path = path.join("info_v1.json");
-        if !info_path.exists() {
-        }
-        
         let file = tokio::fs::read(&info_path).await?;
         
         let instance_info: InstanceInfo = serde_json::from_slice(&file)?;
@@ -635,8 +632,8 @@ impl Instance {
     pub fn create_modify_message_with_status(&self, status: InstanceStatus) -> MessageToFrontend {
         MessageToFrontend::InstanceModified {
             id: self.id,
-            name: self.name.clone(),
-            version: self.version.clone(),
+            name: self.name,
+            version: self.version,
             loader: self.loader,
             status
         }
@@ -687,7 +684,7 @@ fn load_world_summary(path: &Path) -> anyhow::Result<InstanceWorldSummary> {
     
     let icon_path = path.join("icon.png");
     let icon = if icon_path.is_file() {
-        std::fs::read(icon_path).map(|v| Arc::from(v)).ok()
+        std::fs::read(icon_path).map(Arc::from).ok()
     } else {
         None
     };
@@ -697,12 +694,12 @@ fn load_world_summary(path: &Path) -> anyhow::Result<InstanceWorldSummary> {
         subtitle,
         level_path: path.into(),
         last_played,
-        png_icon: icon.into(),
+        png_icon: icon,
     })
 }
 
 fn load_servers_summary(server_dat_path: &Path) -> anyhow::Result<Vec<InstanceServerSummary>> {
-    let raw = std::fs::read(&server_dat_path)?;
+    let raw = std::fs::read(server_dat_path)?;
     
     let mut nbt_data = raw.as_slice();
     let result = nbt::decode::read_named(&mut nbt_data)?;
@@ -715,11 +712,10 @@ fn load_servers_summary(server_dat_path: &Path) -> anyhow::Result<Vec<InstanceSe
     for server in servers.iter() {
         let server = server.as_compound().unwrap();
         
-        if let Some(hidden) = server.find_byte("hidden") {
-            if *hidden != 0 {
+        if let Some(hidden) = server.find_byte("hidden")
+            && *hidden != 0 {
                 continue;
             }
-        }
         
         let Some(ip) = server.find_string("ip") else {
             continue;

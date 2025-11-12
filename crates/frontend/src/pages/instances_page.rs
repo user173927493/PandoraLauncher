@@ -176,22 +176,19 @@ impl InstancesPage {
 
                     let mut to_select = None;
 
-                    if let Some(last_selected) = dropdown.selected_value().cloned() {
-                        if versions.contains(&last_selected) {
+                    if let Some(last_selected) = dropdown.selected_value().cloned()
+                        && versions.contains(&last_selected) {
                             to_select = Some(last_selected);
                         }
-                    }
 
-                    if to_select.is_none() {
-                        if let Some(latest) = latest {
-                            if versions.contains(&latest) {
+                    if to_select.is_none()
+                        && let Some(latest) = latest
+                            && versions.contains(&latest) {
                                 to_select = Some(latest);
                             }
-                        }
-                    }
 
                     if to_select.is_none() {
-                        to_select = versions.first().map(SharedString::clone);
+                        to_select = versions.first().cloned();
                     }
 
                     dropdown.set_items(VersionList {
@@ -399,7 +396,7 @@ impl InstancesPage {
                         loader: selected_loader_value
                     });
 
-                    return true;
+                    true
                 })
                 .child(content)
         });

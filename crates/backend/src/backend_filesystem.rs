@@ -40,11 +40,10 @@ impl BackendState {
                         continue;
                     };
                     
-                    if let Some(last_event) = last_event.take() {
-                        if last_event.change_or_remove_path() != next_event.change_or_remove_path() {
+                    if let Some(last_event) = last_event.take()
+                        && last_event.change_or_remove_path() != next_event.change_or_remove_path() {
                             self.handle_filesystem_event(last_event, &mut after_debounce_effects).await;
                         }
-                    }
                     
                     last_event = Some(next_event);
                 }
@@ -52,11 +51,10 @@ impl BackendState {
                     self.handle_filesystem_event(last_event, &mut after_debounce_effects).await;
                 }
                 for id in after_debounce_effects.reload_mods {
-                    if let Some(instance) = self.instances.get_mut(id.index) {
-                        if instance.id == id {
+                    if let Some(instance) = self.instances.get_mut(id.index)
+                        && instance.id == id {
                             instance.start_load_mods(&self.notify_tick, &self.mod_metadata_manager);
                         }
-                    }
                 }
             },
             Err(_) => {
@@ -67,11 +65,10 @@ impl BackendState {
     }
     
     async fn handle_filesystem_change_event(&mut self, path: Arc<Path>, after_debounce_effects: &mut AfterDebounceEffects) {
-        if let Some(target) = self.watching.get(&path).copied() {
-            if self.filesystem_handle_change(target, &path, after_debounce_effects).await {
+        if let Some(target) = self.watching.get(&path).copied()
+            && self.filesystem_handle_change(target, &path, after_debounce_effects).await {
                 return;
             }
-        }
         let Some(parent_path) = path.parent() else {
             return;
         };
@@ -81,11 +78,10 @@ impl BackendState {
     }
     
     async fn handle_filesystem_remove_event(&mut self, path: Arc<Path>, after_debounce_effects: &mut AfterDebounceEffects) {
-        if let Some(target) = self.watching.remove(&path) {
-            if self.filesystem_handle_removed(target, &path, after_debounce_effects).await {
+        if let Some(target) = self.watching.remove(&path)
+            && self.filesystem_handle_removed(target, &path, after_debounce_effects).await {
                 return;
             }
-        }
         let Some(parent_path) = path.parent() else {
             return;
         };
@@ -95,18 +91,15 @@ impl BackendState {
     }
     
     async fn handle_filesystem_rename_event(&mut self, from: Arc<Path>, to: Arc<Path>, after_debounce_effects: &mut AfterDebounceEffects) {
-        if let Some(target) = self.watching.remove(&from) {
-            if self.filesystem_handle_renamed(target, &from, &to, after_debounce_effects).await {
+        if let Some(target) = self.watching.remove(&from)
+            && self.filesystem_handle_renamed(target, &from, &to, after_debounce_effects).await {
                 return;
             }
-        }
-        if let Some(parent_path) = from.parent() {
-            if let Some(parent) = self.watching.get(parent_path).copied() {
-                if self.filesystem_handle_child_renamed(parent, parent_path, &from, &to, after_debounce_effects).await {
+        if let Some(parent_path) = from.parent()
+            && let Some(parent) = self.watching.get(parent_path).copied()
+                && self.filesystem_handle_child_renamed(parent, parent_path, &from, &to, after_debounce_effects).await {
                     return;
                 }
-            }
-        }
         self.handle_filesystem_remove_event(from, after_debounce_effects).await;
         self.handle_filesystem_change_event(to, after_debounce_effects).await;
     }
@@ -162,7 +155,7 @@ impl BackendState {
                 }
                 // Minecraft moves the servers.dat to servers.dat_old and then back,
                 // so lets just re-listen immediately
-                if self.watcher.watch(&path, notify::RecursiveMode::NonRecursive).is_ok() {
+                if self.watcher.watch(path, notify::RecursiveMode::NonRecursive).is_ok() {
                     self.watching.insert(path.clone(), target);
                 }
                 true
@@ -187,9 +180,9 @@ impl BackendState {
     async fn filesystem_handle_renamed(&mut self, from_target: WatchTarget, from: &Arc<Path>, to: &Arc<Path>, _after_debounce_effects: &mut AfterDebounceEffects) -> bool {
         match from_target {
             WatchTarget::InstanceDir { id } => {
-                if let Some(instance) = self.instances.get_mut(id.index) && instance.id == id {
-                    if from.parent() == to.parent() {
-                        let old_name = instance.name.clone();
+                if let Some(instance) = self.instances.get_mut(id.index) && instance.id == id
+                    && from.parent() == to.parent() {
+                        let old_name = instance.name;
                         instance.name = to.file_name().unwrap().to_string_lossy().into_owned().into();
                         
                         self.send.send_info(format!("Instance '{}' renamed to '{}'", old_name, instance.name)).await;
@@ -204,7 +197,7 @@ impl BackendState {
                         let server_dat_path = instance.server_dat_path.clone();
                         let mods_path = instance.mods_path.clone();
                         
-                        self.watch_filesystem(&to, WatchTarget::InstanceDir { id }).await;
+                        self.watch_filesystem(to, WatchTarget::InstanceDir { id }).await;
                         if watching_dot_minecraft {
                             self.watch_filesystem(&dot_minecraft_path, WatchTarget::InstanceDotMinecraftDir { id }).await;
                         }
@@ -220,7 +213,6 @@ impl BackendState {
                         
                         return true;
                     }
-                }
                 false
             },
             _ => false
@@ -231,9 +223,9 @@ impl BackendState {
         match parent {
             WatchTarget::InstancesDir => {
                 if path.is_dir() {
-                    let success = self.load_instance_from_path(&path, false, true).await;
+                    let success = self.load_instance_from_path(path, false, true).await;
                     if !success {
-                        self.watch_filesystem(&path, WatchTarget::InvalidInstanceDir).await;
+                        self.watch_filesystem(path, WatchTarget::InvalidInstanceDir).await;
                     }
                 }
             },
@@ -243,8 +235,8 @@ impl BackendState {
                 };
                 if file_name == "info_v1.json" {
                     self.load_instance_from_path(parent_path, true, true).await;
-                } else if file_name == ".minecraft" {
-                    if let Some(instance) = self.instances.get_mut(id.index) && instance.id == id {
+                } else if file_name == ".minecraft"
+                    && let Some(instance) = self.instances.get_mut(id.index) && instance.id == id {
                         instance.mark_world_dirty(None);
                         instance.mark_servers_dirty();
                         instance.mark_mods_dirty(None);
@@ -258,7 +250,7 @@ impl BackendState {
                         let mods_path = instance.mods_path.clone();
                         
                         if watching_dot_minecraft {
-                            self.watch_filesystem(&path, WatchTarget::InstanceDotMinecraftDir { id }).await;
+                            self.watch_filesystem(path, WatchTarget::InstanceDotMinecraftDir { id }).await;
                         }
                         if watching_saves_dir {
                             self.watch_filesystem(&saves_path, WatchTarget::InstanceSavesDir { id }).await;
@@ -270,7 +262,6 @@ impl BackendState {
                             self.watch_filesystem(&mods_path, WatchTarget::InstanceModsDir { id }).await;
                         }
                     }
-                }
             },
             WatchTarget::ServersDat { .. } => {},
             WatchTarget::InstanceDotMinecraftDir { id } => {
@@ -281,15 +272,15 @@ impl BackendState {
                     match file_name.to_str() {
                         Some("mods") if instance.watching_mods_dir => {
                             instance.mark_mods_dirty(None);
-                            self.watch_filesystem(&path, WatchTarget::InstanceModsDir { id }).await;
+                            self.watch_filesystem(path, WatchTarget::InstanceModsDir { id }).await;
                         },
                         Some("saves") if instance.watching_saves_dir => {
                             instance.mark_world_dirty(None);
-                            self.watch_filesystem(&path, WatchTarget::InstanceSavesDir { id }).await;
+                            self.watch_filesystem(path, WatchTarget::InstanceSavesDir { id }).await;
                         },
                         Some("servers.dat") if instance.watching_server_dat => {
                             instance.mark_servers_dirty();
-                            self.watch_filesystem(&path, WatchTarget::ServersDat { id }).await;
+                            self.watch_filesystem(path, WatchTarget::ServersDat { id }).await;
                         },
                         _ => {}
                     }
@@ -371,37 +362,37 @@ fn get_simple_event(event: notify::Event) -> Option<FilesystemEvent> {
             if create_kind == CreateKind::Other {
                 return None;
             }
-            return Some(FilesystemEvent::Change(event.paths[0].clone().into()));
+            Some(FilesystemEvent::Change(event.paths[0].clone().into()))
         },
         EventKind::Modify(modify_kind) => {
             match modify_kind {
                 ModifyKind::Any => {
-                    return Some(FilesystemEvent::Change(event.paths[0].clone().into()));
+                    Some(FilesystemEvent::Change(event.paths[0].clone().into()))
                 },
                 ModifyKind::Data(data_change) => {
                     if data_change == DataChange::Any || data_change == DataChange::Content {
-                        return Some(FilesystemEvent::Change(event.paths[0].clone().into()));
+                        Some(FilesystemEvent::Change(event.paths[0].clone().into()))
                     } else {
-                        return None;
+                        None
                     }
                 },
-                ModifyKind::Metadata(_) => return None,
+                ModifyKind::Metadata(_) => None,
                 ModifyKind::Name(rename_mode) => {
                     match rename_mode {
-                        RenameMode::Any => return None,
+                        RenameMode::Any => None,
                         RenameMode::To => {
-                            return Some(FilesystemEvent::Change(event.paths[0].clone().into()));
+                            Some(FilesystemEvent::Change(event.paths[0].clone().into()))
                         },
                         RenameMode::From => {
-                            return Some(FilesystemEvent::Remove(event.paths[0].clone().into()));
+                            Some(FilesystemEvent::Remove(event.paths[0].clone().into()))
                         },
                         RenameMode::Both => {
-                            return Some(FilesystemEvent::Rename(event.paths[0].clone().into(), event.paths[1].clone().into()));
+                            Some(FilesystemEvent::Rename(event.paths[0].clone().into(), event.paths[1].clone().into()))
                         },
-                        RenameMode::Other => return None,
+                        RenameMode::Other => None,
                     }
                 },
-                ModifyKind::Other => return None,
+                ModifyKind::Other => None,
             }
         },
         EventKind::Remove(remove_kind) => {
@@ -409,10 +400,10 @@ fn get_simple_event(event: notify::Event) -> Option<FilesystemEvent> {
                 return None;
             }
     
-            return Some(FilesystemEvent::Remove(event.paths[0].clone().into()));
+            Some(FilesystemEvent::Remove(event.paths[0].clone().into()))
         },
-        EventKind::Any => return None,
-        EventKind::Access(_) => return None,
-        EventKind::Other => return None,
-    };
+        EventKind::Any => None,
+        EventKind::Access(_) => None,
+        EventKind::Other => None,
+    }
 }

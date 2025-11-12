@@ -29,16 +29,16 @@ impl InstanceQuickplaySubpage {
             id: instance_id,
             name: instance.name.clone(),
             backend_handle: backend_handle.clone(),
-            worlds: (&*instance.worlds.read(cx)).to_vec(),
-            searched: (&*instance.worlds.read(cx)).to_vec(),
+            worlds: instance.worlds.read(cx).to_vec(),
+            searched: instance.worlds.read(cx).to_vec(),
         };
         
         let servers_list_delegate = ServersListDelegate {
             id: instance_id,
             name: instance.name.clone(),
             backend_handle: backend_handle.clone(),
-            servers: (&*instance.servers.read(cx)).to_vec(),
-            searched: (&*instance.servers.read(cx)).to_vec(),
+            servers: instance.servers.read(cx).to_vec(),
+            searched: instance.servers.read(cx).to_vec(),
         };
         
         let worlds = instance.worlds.clone();
@@ -47,7 +47,7 @@ impl InstanceQuickplaySubpage {
         let window2 = &mut window;
         let world_list = cx.new(move |cx| {
             cx.observe(&worlds, |list: &mut ListState<WorldsListDelegate>, worlds, cx| {
-                let worlds = (&*worlds.read(cx)).to_vec();
+                let worlds = worlds.read(cx).to_vec();
                 let delegate = list.delegate_mut();
                 delegate.worlds = worlds.clone();
                 delegate.searched = worlds;
@@ -59,7 +59,7 @@ impl InstanceQuickplaySubpage {
         
         let server_list = cx.new(move |cx| {
             cx.observe(&servers, |list: &mut ListState<ServersListDelegate>, servers, cx| {
-                let servers = (&*servers.read(cx)).to_vec();
+                let servers = servers.read(cx).to_vec();
                 let delegate = list.delegate_mut();
                 delegate.servers = servers.clone();
                 delegate.searched = servers;
