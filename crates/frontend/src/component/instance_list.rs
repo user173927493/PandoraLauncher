@@ -2,9 +2,8 @@
 use bridge::handle::BackendHandle;
 use gpui::{prelude::*, *};
 use gpui_component::{
-    button::{Button, ButtonVariants}, h_flex, table::{Column, ColumnSort, Table, TableDelegate, TableState}, Sizable
+    button::{Button, ButtonVariants}, h_flex, table::{Column, ColumnSort, TableDelegate, TableState}, Sizable
 };
-use schema::loader::Loader;
 
 use crate::{entity::{instance::{InstanceAddedEvent, InstanceEntry, InstanceModifiedEvent, InstanceRemovedEvent}, DataEntities}, root::{self, LauncherRootGlobal}, ui};
 
@@ -72,15 +71,15 @@ impl InstanceList {
 }
 
 impl TableDelegate for InstanceList {
-    fn columns_count(&self, cx: &App) -> usize {
+    fn columns_count(&self, _cx: &App) -> usize {
         self.columns.len()
     }
 
-    fn rows_count(&self, cx: &App) -> usize {
+    fn rows_count(&self, _cx: &App) -> usize {
         self.items.len()
     }
 
-    fn column(&self, col_ix: usize, cx: &App) -> &gpui_component::table::Column {
+    fn column(&self, col_ix: usize, _cx: &App) -> &gpui_component::table::Column {
         &self.columns[col_ix]
     }
 
@@ -88,8 +87,8 @@ impl TableDelegate for InstanceList {
             &mut self,
             col_ix: usize,
             sort: gpui_component::table::ColumnSort,
-            window: &mut Window,
-            cx: &mut Context<TableState<Self>>,
+            _window: &mut Window,
+            _cx: &mut Context<TableState<Self>>,
         ) {
         if let Some(col) = self.columns.get_mut(col_ix) {
             match col.key.as_ref() {
@@ -110,8 +109,8 @@ impl TableDelegate for InstanceList {
         &self,
         row_ix: usize,
         col_ix: usize,
-        window: &mut Window,
-        cx: &mut App,
+        _window: &mut Window,
+        _cx: &mut App,
     ) -> impl IntoElement {
         let item = &self.items[row_ix];
         if let Some(col) = self.columns.get(col_ix) {
@@ -162,12 +161,7 @@ impl TableDelegate for InstanceList {
                         .into_any_element()
                 },
                 "loader" => {
-                    match item.loader {
-                        Loader::Vanilla => "Vanilla".into_any_element(),
-                        Loader::Fabric => "Fabric".into_any_element(),
-                        Loader::Forge => "Forge".into_any_element(),
-                        Loader::NeoForge => "NeoForge".into_any_element(),
-                    }
+                    item.loader.name().into_any_element()
                 }
                 _ => "Unknown".into_any_element()
             }

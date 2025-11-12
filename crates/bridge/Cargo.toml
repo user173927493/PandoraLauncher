@@ -10,3 +10,4 @@ schema.workspace = true
 ustr.workspace = true
 tokio.workspace = true
 uuid.workspace = true
+tokio-util.workspace = true

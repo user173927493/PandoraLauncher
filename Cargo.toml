@@ -39,7 +39,6 @@ directories = "6.0.0"
 flate2 = "1.1.5"
 ftree = { path = "../ftree"}
 futures = "0.3.31"
-futures-util = "0.3.31"
 gpui = "0.2.2"
 gpui-component = { path = "../gpui-component/crates/ui" }
 hex = "0.4.3"
@@ -57,7 +56,7 @@ paste = "1.0.15"
 quick-xml = "0.38.3"
 rand = "0.8.5"
 regex = "1.12.2"
-reqwest = { version = "0.12.24", features = ["json", "rustls-tls"] }
+reqwest = { version = "0.12.24", features = ["json", "rustls-tls", "stream"] }
 rust-embed = "8.7.2"
 rust-lzma = "0.5"
 rustc-hash = "2.1.1"
@@ -88,3 +87,5 @@ oo7 = { version = "0.5.0", default-features = false, features = ["native_crypto"
 xmlparser = "0.13.6"
 heapless = "0.9.1"
 intrusive-collections = "0.9.7"
+tokio-util = "0.7.17"
+enumset = "1.1.10"

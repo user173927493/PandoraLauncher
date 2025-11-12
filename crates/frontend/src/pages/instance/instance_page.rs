@@ -41,7 +41,7 @@ impl InstancePage {
         }
     }
     
-    pub fn set_subpage(&mut self, page_type: InstanceSubpageType, window: &mut Window, cx: &mut Context<Self>) {
+    fn set_subpage(&mut self, page_type: InstanceSubpageType, window: &mut Window, cx: &mut Context<Self>) {
         match page_type {
             InstanceSubpageType::Quickplay => {
                 if let InstanceSubpage::Quickplay(_) = self.subpage {
@@ -66,7 +66,7 @@ impl InstancePage {
 }
 
 impl Render for InstancePage {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let selected_index = match &self.subpage {
             InstanceSubpage::Quickplay(_) => 0,
             InstanceSubpage::Mods(_) => 2,

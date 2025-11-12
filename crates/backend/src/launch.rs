@@ -1,16 +1,14 @@
 use std::{borrow::Cow, cmp::Ordering, collections::{HashMap, HashSet}, ffi::{OsStr, OsString}, io::Write, path::{Path, PathBuf}, process::{Child, Stdio}, sync::{atomic::AtomicBool, Arc, OnceLock}};
 
-use auth::{models::MinecraftAccessToken};
-use bridge::{handle::FrontendHandle, message::QuickPlayLaunch, modal_action::{ModalAction, ProgressTracker, ProgressTrackers}};
+use bridge::{handle::FrontendHandle, message::{MessageToFrontend, QuickPlayLaunch}, modal_action::{ModalAction, ProgressTracker, ProgressTrackers}};
 use futures::{FutureExt, TryFutureExt};
 use lzma::LzmaError;
 use regex::Regex;
 use schema::{assets_index::AssetsIndex, fabric_launch::FabricLaunch, java_runtime_component::{JavaRuntimeComponentFile, JavaRuntimeComponentManifest}, loader::Loader, version::{GameLibrary, GameLibraryArtifact, GameLibraryDownloads, GameLibraryExtractOptions, GameLogging, LaunchArgument, LaunchArgumentValue, MinecraftVersion, OsArch, OsName, Rule, RuleAction}};
 use sha1::{Digest, Sha1};
 use ustr::Ustr;
-use uuid::Uuid;
 
-use crate::{account::MinecraftLoginInfo, directories::LauncherDirectories, instance::Instance, launch_wrapper, log_reader, metadata::manager::{AssetsIndexMetadata, FabricLaunchMetadata, FabricLoaderManifestMetadata, MetaLoadError, MetadataManager, MinecraftVersionManifestMetadata, MinecraftVersionMetadata, MojangJavaRuntimeComponentMetadata, MojangJavaRuntimesMetadata}};
+use crate::{account::MinecraftLoginInfo, directories::LauncherDirectories, instance::Instance, launch_wrapper, metadata::manager::{AssetsIndexMetadata, FabricLaunchMetadata, FabricLoaderManifestMetadata, MetaLoadError, MetadataManager, MinecraftVersionManifestMetadata, MinecraftVersionMetadata, MojangJavaRuntimeComponentMetadata, MojangJavaRuntimesMetadata}};
 
 pub struct Launcher {
     meta: Arc<MetadataManager>,
@@ -31,7 +29,9 @@ pub enum LaunchError {
     #[error("Failed to find version:\n{0}")]
     CantFindVersion(&'static str),
     #[error("Invalid instance name:\n{0}")]
-    InvalidInstanceName(&'static str)
+    InvalidInstanceName(&'static str),
+    #[error("Cancelled by user")]
+    CancelledByUser,
 }
 
 impl Launcher {
@@ -46,8 +46,14 @@ impl Launcher {
     pub async fn launch(&self, http_client: &reqwest::Client, instance: &mut Instance, quick_play: Option<QuickPlayLaunch>, login_info: MinecraftLoginInfo, launch_tracker: &ProgressTracker, modal_action: &ModalAction) -> Result<Child, LaunchError> {
         launch_tracker.set_total(6);
         
-        let version_info = self.create_launch_version(&launch_tracker, instance).await?;
-
+        let version_info = tokio::select! {
+            result = self.create_launch_version(&launch_tracker, instance) => result?,
+            _ = modal_action.request_cancel.cancelled() => {
+                self.sender.send(MessageToFrontend::CloseModal).await;
+                return Err(LaunchError::CancelledByUser);
+            }
+        };
+        
         launch_tracker.add_count(1);
         launch_tracker.notify().await;
 
@@ -90,12 +96,20 @@ impl Launcher {
             self.load_libraries(&http_client, &artifacts, &modal_action.trackers, &launch_tracker);
         let load_log_configuration = self.load_log_configuration(&http_client, version_info.logging.as_ref());
 
-        let (java_path, assets_index_name, library_paths, log_configuration) = futures::future::try_join4(
+        let joined = futures::future::try_join4(
             mojang_java_binary_future.map_err(LaunchError::from),
             load_assets_future.map_err(LaunchError::from),
             load_libraries_future.map_err(LaunchError::from),
             load_log_configuration.map(|v| Ok(v)),
-        ).await?;
+        );
+        
+        let (java_path, assets_index_name, library_paths, log_configuration) = tokio::select! {
+            result = joined => result?,
+            _ = modal_action.request_cancel.cancelled() => {
+                self.sender.send(MessageToFrontend::CloseModal).await;
+                return Err(LaunchError::CancelledByUser);
+            }
+        };
         
         launch_tracker.add_count(1);
         launch_tracker.notify().await;
@@ -160,6 +174,11 @@ impl Launcher {
             rule_context: launch_rule_context,
             login_info,
         };
+        
+        if modal_action.has_requested_cancel() {
+            self.sender.send(MessageToFrontend::CloseModal).await;
+            return Err(LaunchError::CancelledByUser);
+        }
 
         let child = launch_context.launch(&version_info);
         
@@ -200,9 +219,14 @@ impl Launcher {
                     launch_tracker2.add_count(1);
                     launch_tracker2.notify().await;
                     
+                    let mut latest_loader_version = loader_manifest.0.iter().filter(|v| v.stable).next();
+                    if latest_loader_version.is_none() {
+                        latest_loader_version = loader_manifest.0.first();
+                    }
+                    
                     let value = meta2.fetch(&FabricLaunchMetadata {
                         minecraft_version,
-                        loader_version: loader_manifest.0.first().unwrap().version.clone(),
+                        loader_version: latest_loader_version.unwrap().version.clone(),
                     }).await?;
                     
                     launch_tracker2.add_count(1);
@@ -230,48 +254,52 @@ impl Launcher {
                     Ok(value)
                 });
                 
-                let (version, fabric_launch): (Arc<MinecraftVersion>, Arc<FabricLaunch>) = futures_util::future::try_join(
+                let (version, fabric_launch): (Arc<MinecraftVersion>, Arc<FabricLaunch>) = futures::future::try_join(
                     version,
                     fabric_launch
                 ).await?;
                 
                 let mut version: MinecraftVersion = (*version).clone();
                 
-                let loader_coordinate = MavenCoordinate::create(&fabric_launch.loader.maven);
-                let artifact_path = loader_coordinate.artifact_path();
-                version.libraries.push(GameLibrary {
-                    downloads: GameLibraryDownloads {
-                        artifact: Some(GameLibraryArtifact {
-                            url: format!("https://maven.fabricmc.net/{}", &artifact_path).into(),
-                            path: artifact_path.into(),
-                            sha1: None,
-                            size: None,
-                        }),
-                        classifiers: None,
-                    },
-                    name: fabric_launch.loader.maven.clone(),
-                    rules: None,
-                    natives: None,
-                    extract: None
-                });
+                if let Some(loader) = &fabric_launch.loader {
+                    let loader_coordinate = MavenCoordinate::create(&loader.maven);
+                    let artifact_path = loader_coordinate.artifact_path();
+                    version.libraries.push(GameLibrary {
+                        downloads: GameLibraryDownloads {
+                            artifact: Some(GameLibraryArtifact {
+                                url: format!("https://maven.fabricmc.net/{}", &artifact_path).into(),
+                                path: artifact_path.into(),
+                                sha1: None,
+                                size: None,
+                            }),
+                            classifiers: None,
+                        },
+                        name: loader.maven.clone(),
+                        rules: None,
+                        natives: None,
+                        extract: None
+                    });
+                }
                 
-                let intermediary_coordinate = MavenCoordinate::create(&fabric_launch.intermediary.maven);
-                let artifact_path = intermediary_coordinate.artifact_path();
-                version.libraries.push(GameLibrary {
-                    downloads: GameLibraryDownloads {
-                        artifact: Some(GameLibraryArtifact {
-                            url: format!("https://maven.fabricmc.net/{}", &artifact_path).into(),
-                            path: artifact_path.into(),
-                            sha1: None,
-                            size: None,
-                        }),
-                        classifiers: None,
-                    },
-                    name: fabric_launch.intermediary.maven.clone(),
-                    rules: None,
-                    natives: None,
-                    extract: None
-                });
+                if let Some(intermediary) = &fabric_launch.intermediary {
+                    let intermediary_coordinate = MavenCoordinate::create(&intermediary.maven);
+                    let artifact_path = intermediary_coordinate.artifact_path();
+                    version.libraries.push(GameLibrary {
+                        downloads: GameLibraryDownloads {
+                            artifact: Some(GameLibraryArtifact {
+                                url: format!("https://maven.fabricmc.net/{}", &artifact_path).into(),
+                                path: artifact_path.into(),
+                                sha1: None,
+                                size: None,
+                            }),
+                            classifiers: None,
+                        },
+                        name: intermediary.maven.clone(),
+                        rules: None,
+                        natives: None,
+                        extract: None
+                    });
+                }
                 
                 let libraries = &fabric_launch.launcher_meta.libraries;
                 for library in libraries.common.iter().chain(libraries.client.iter()) {
@@ -300,6 +328,7 @@ impl Launcher {
             },
             Loader::Forge => todo!(),
             Loader::NeoForge => todo!(),
+            Loader::Unknown => todo!(),
         }
     }
 
@@ -356,7 +385,7 @@ impl Launcher {
         };
 
         let java_runtime_tracker = ProgressTracker::new(initial_title.into(), self.sender.clone());
-        progress_trackers.trackers.write().unwrap().push(java_runtime_tracker.clone());
+        progress_trackers.push(java_runtime_tracker.clone());
         java_runtime_tracker.notify().await;
 
         let result = do_java_runtime_load(&http_client, runtime_component_dir, fresh_install, runtime, &java_runtime_tracker).await;
@@ -618,7 +647,7 @@ pub enum LoadJavaRuntimeError {
     WrongRawSize,
     #[error("Failed to decompress file")]
     Lzma(#[from] LzmaError),
-    #[error("Downloaded file had had wrong hash")]
+    #[error("Downloaded file had the wrong hash")]
     WrongHash,
     #[error("Unable to find binary")]
     UnableToFindBinary,
@@ -672,7 +701,7 @@ async fn do_java_runtime_load(http_client: &reqwest::Client, runtime_component_d
                     };
                     
                     if valid_hash_on_disk {
-                        java_runtime_tracker.add_count(downloads.raw.size);
+                        java_runtime_tracker.add_count(downloads.raw.size as usize);
                         java_runtime_tracker.notify().await;
                         return Ok(());
                     }
@@ -749,7 +778,7 @@ async fn do_java_runtime_load(http_client: &reqwest::Client, runtime_component_d
                         let _ = tokio::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).await;
                     }
 
-                    java_runtime_tracker.add_count(downloads.raw.size);
+                    java_runtime_tracker.add_count(downloads.raw.size as usize);
                     java_runtime_tracker.notify().await;
                     return Ok(());
                 };
@@ -760,7 +789,7 @@ async fn do_java_runtime_load(http_client: &reqwest::Client, runtime_component_d
             },
         }
     }
-    java_runtime_tracker.set_total(total_size);
+    java_runtime_tracker.set_total(total_size as usize);
     java_runtime_tracker.notify().await;
 
     futures::future::try_join_all(tasks).await?;
@@ -810,7 +839,7 @@ pub enum LoadAssetObjectsError {
     InvalidHash(Ustr),
     #[error("Downloaded file had wrong response size")]
     WrongResponseSize,
-    #[error("Downloaded file had had wrong hash")]
+    #[error("Downloaded file had the wrong hash")]
     WrongHash,
 }
 
@@ -857,7 +886,7 @@ async fn do_asset_objects_load(http_client: &reqwest::Client, assets_index: Arc<
             };
             
             if valid_hash_on_disk {
-                assets_tracker.add_count(asset.size);
+                assets_tracker.add_count(asset.size as usize);
                 assets_tracker.notify().await;
                 return Ok(());
             }
@@ -892,14 +921,14 @@ async fn do_asset_objects_load(http_client: &reqwest::Client, assets_index: Arc<
             }
 
             tokio::fs::write(path.clone(), &*bytes).await?;
-            assets_tracker.add_count(asset.size);
+            assets_tracker.add_count(asset.size as usize);
             assets_tracker.notify().await;
             return Ok(());
         };
         tasks.push(task);
     }
 
-    assets_tracker.set_total(total_size);
+    assets_tracker.set_total(total_size as usize);
     assets_tracker.notify().await;
 
     if let Err(error) = futures::future::try_join_all(tasks).await {
@@ -919,7 +948,7 @@ pub enum LoadLibrariesError {
     InvalidHash(Ustr),
     #[error("Downloaded file had wrong response size")]
     WrongResponseSize,
-    #[error("Downloaded file had had wrong hash")]
+    #[error("Downloaded file had the wrong hash")]
     WrongHash,
     #[error("Error accessing libraries directory")]
     CannotCanonicalizeLibrariesDir,
@@ -946,7 +975,7 @@ async fn do_libraries_load(http_client: &reqwest::Client, artifacts: &[GameLibra
         let expected_hash = if let Some(sha1) = &artifact.sha1 {
             let mut expected_hash = [0u8; 20];
             let Ok(_) = hex::decode_to_slice(sha1.as_str(), &mut expected_hash) else {
-                return Err(LoadLibrariesError::InvalidHash(sha1.clone()));
+                return Err(LoadLibrariesError::InvalidHash(*sha1));
             };
             Some(expected_hash)
         } else {
@@ -954,14 +983,14 @@ async fn do_libraries_load(http_client: &reqwest::Client, artifacts: &[GameLibra
         };
         
         if !path_is_normal(artifact.path.as_str()) {
-            return Err(LoadLibrariesError::IllegalLibraryPath(artifact.path.clone()));
+            return Err(LoadLibrariesError::IllegalLibraryPath(artifact.path));
         }
         
         let artifact_path = libraries_dir.join(artifact.path.as_str());
         let Some(artifact_path_parent) = artifact_path.parent() else {
-            return Err(LoadLibrariesError::IllegalLibraryPath(artifact.path.clone()));
+            return Err(LoadLibrariesError::IllegalLibraryPath(artifact.path));
         };
-        let _ = std::fs::create_dir_all(&artifact_path_parent);
+        let _ = std::fs::create_dir_all(artifact_path_parent);
         
         let tracker_size = artifact.size.unwrap_or(1000000);
         total_size += tracker_size;
@@ -971,9 +1000,8 @@ async fn do_libraries_load(http_client: &reqwest::Client, artifacts: &[GameLibra
         let disk_semaphore = &disk_semaphore;
         
         let task = async move {
-            let valid_hash_on_disk = if let Some(expected_hash) = expected_hash.clone() {
+            let valid_hash_on_disk = if let Some(expected_hash) = expected_hash {
                 let artifact_path = artifact_path.clone();
-                let expected_hash = expected_hash.clone();
                 let permit = disk_semaphore.acquire().await.unwrap();
                 let result = tokio::task::spawn_blocking(move || {
                     crate::check_sha1_hash(&artifact_path, expected_hash).unwrap_or(false)
@@ -981,16 +1009,17 @@ async fn do_libraries_load(http_client: &reqwest::Client, artifacts: &[GameLibra
                 drop(permit);
                 result
             } else {
-                true
+                artifact_path.exists()
             };
             
             if valid_hash_on_disk {
-                libraries_tracker.add_count(tracker_size);
+                libraries_tracker.add_count(tracker_size as usize);
                 libraries_tracker.notify().await;
-                return Ok((artifact.path.clone(), artifact_path));
+                return Ok((artifact.path, artifact_path));
             }
 
-            if started_downloading.swap(true, std::sync::atomic::Ordering::Relaxed) == false {
+            let was_downloading = started_downloading.swap(true, std::sync::atomic::Ordering::Relaxed);
+            if !was_downloading {
                 libraries_tracker.set_title(Arc::from("Downloading game libraries"));
             }
 
@@ -999,10 +1028,8 @@ async fn do_libraries_load(http_client: &reqwest::Client, artifacts: &[GameLibra
             let bytes = Arc::new(response.bytes().await?);
             drop(permit);
 
-            if let Some(artifact_size) = artifact.size {
-                if bytes.len() != artifact_size as usize {
-                    return Err(LoadLibrariesError::WrongResponseSize);
-                }
+            if let Some(artifact_size) = artifact.size && bytes.len() != artifact_size as usize {
+                return Err(LoadLibrariesError::WrongResponseSize);
             }
 
             let correct_hash = {
@@ -1026,14 +1053,14 @@ async fn do_libraries_load(http_client: &reqwest::Client, artifacts: &[GameLibra
             }
 
             tokio::fs::write(artifact_path.clone(), &*bytes).await?;
-            libraries_tracker.add_count(tracker_size);
+            libraries_tracker.add_count(tracker_size as usize);
             libraries_tracker.notify().await;
-            return Ok((artifact.path.clone(), artifact_path));
+            Ok((artifact.path, artifact_path))
         };
         tasks.push(task);
     }
 
-    libraries_tracker.set_total(total_size);
+    libraries_tracker.set_total(total_size as usize);
     libraries_tracker.notify().await;
 
     futures::future::try_join_all(tasks).await
@@ -1117,10 +1144,8 @@ impl LaunchRuleContext {
         // Remove duplicate libraries
         let mut deduplicated_libraries: HashMap<String, (GameLibrary, Vec<isize>)> = HashMap::new();
         for library in libraries {
-            if let Some(rules) = &library.rules {
-                if !self.check_rules(&rules) {
-                    continue;
-                }
+            if let Some(rules) = &library.rules && !self.check_rules(rules) {
+                continue;
             }
             
             let coordinate = MavenCoordinate::create(&library.name);
@@ -1171,7 +1196,7 @@ impl LaunchRuleContext {
                     let Some(natives) = classifiers.get(natives_id) {
                 artifacts.push(natives.clone());
                 if let Some(extract) = &library.extract {
-                    natives_to_extract.insert(natives.path.clone(), extract.clone());
+                    natives_to_extract.insert(natives.path, extract.clone());
                 }
             }
         }
@@ -1195,7 +1220,7 @@ impl LaunchRuleContext {
             if features.is_demo_user && !self.is_demo_user {
                 return false;
             }
-            if features.has_custom_resolution && !self.custom_resolution.is_some() {
+            if features.has_custom_resolution && self.custom_resolution.is_none() {
                 return false;
             }
             if features.has_quick_plays_support {
@@ -1239,13 +1264,11 @@ impl LaunchRuleContext {
                     },
                 }
             }
-            if let Some(version) = &os.version {
-                if let Ok(regex) = Regex::new(version.as_str()) {
-                    static OS_VERSION: OnceLock<String> = OnceLock::new();
-                    let os_version = OS_VERSION.get_or_init(|| format!("{}", os_info::get().version()));
-                    if !regex.is_match(&os_version) {
-                        return false;
-                    }
+            if let Some(version) = &os.version && let Ok(regex) = Regex::new(version.as_str()) {
+                static OS_VERSION: OnceLock<String> = OnceLock::new();
+                let os_version = OS_VERSION.get_or_init(|| format!("{}", os_info::get().version()));
+                if !regex.is_match(os_version) {
+                    return false;
                 }
             }
         }
@@ -1291,7 +1314,6 @@ impl LaunchContext {
             command.arg(java_library_path);
             command.arg("-cp");
             command.arg(&self.classpath);
-            dbg!(&self.classpath);
         }
         
         if let Some(log_configuration) = &self.log_configuration {
@@ -1310,20 +1332,20 @@ impl LaunchContext {
             self.process_arguments(&arguments.game, &mut |arg| {
                 stdin_arguments.push_str("arg\n");
                 stdin_arguments.push_str(arg.to_string_lossy().as_ref());
-                stdin_arguments.push_str("\n");
+                stdin_arguments.push('\n');
             });
         }
         if let Some(legacy_arguments) = &version_info.minecraft_arguments {
             for argument in legacy_arguments.split_ascii_whitespace() {
                 stdin_arguments.push_str("arg\n");
                 stdin_arguments.push_str(self.expand_argument(argument).to_string_lossy().as_ref());
-                stdin_arguments.push_str("\n");
+                stdin_arguments.push('\n');
             }
         }
         
         stdin_arguments.push_str("launch\n");
         stdin_arguments.push_str(version_info.main_class.as_str());
-        stdin_arguments.push_str("\n");
+        stdin_arguments.push('\n');
         
         stdin.write_all(stdin_arguments.as_bytes()).unwrap();
         stdin.flush().unwrap();
@@ -1349,11 +1371,11 @@ impl LaunchContext {
     fn process_argument(&self, value: &LaunchArgumentValue, handler: &mut impl FnMut(&OsStr)) {
         match value {
             LaunchArgumentValue::Single(string) => {
-                (handler)(&*self.expand_argument(string));
+                (handler)(&self.expand_argument(string));
             },
             LaunchArgumentValue::Multiple(strings) => {
                 for string in strings.iter() {
-                    (handler)(&*self.expand_argument(string));
+                    (handler)(&self.expand_argument(string));
                 }
             },
         }

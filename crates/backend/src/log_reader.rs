@@ -1,4 +1,4 @@
-use std::{borrow::Cow, io::{BufRead, BufReader, Read}, process::ChildStdout, sync::{atomic::AtomicUsize, Arc}};
+use std::{borrow::Cow, io::{BufRead, BufReader}, process::ChildStdout, sync::{atomic::AtomicUsize, Arc}};
 
 use bridge::{game_output::GameOutputLogLevel, handle::FrontendHandle, keep_alive::KeepAlive, message::MessageToFrontend};
 use chrono::Utc;
@@ -14,13 +14,12 @@ pub fn start_game_output(stdout: ChildStdout, sender: FrontendHandle) {
         
         let keep_alive = KeepAlive::new();
         let keep_alive_handle = keep_alive.create_handle();
-        let _ = sender.blocking_send(MessageToFrontend::CreateGameOutputWindow {
+        sender.blocking_send(MessageToFrontend::CreateGameOutputWindow {
             id,
             keep_alive
         });
         
-        let mut raw_reader = BufReader::new(stdout);
-        let mut reader = quick_xml::reader::Reader::from_reader(raw_reader);
+        let mut reader = quick_xml::reader::Reader::from_reader(BufReader::new(stdout));
         
         let mut buf = Vec::new();
         let mut stack = Vec::new();
@@ -54,7 +53,6 @@ pub fn start_game_output(stdout: ChildStdout, sender: FrontendHandle) {
             // Access token replacements
             (regex::Regex::new(r#"SignedJWT: [^\s]+"#).unwrap(), "SignedJWT: *****"),
             (regex::Regex::new(r#"Session ID is token: [^\s)]+"#).unwrap(), "Session ID is token: *****"),
-            (regex::Regex::new(r#"--accessToken [^\s]+"#).unwrap(), "--accessToken *****"),
             // Computer username replacements
             (regex::Regex::new(r#"\/home\/[^/]+\/"#).unwrap(), "/home/*****/"),
             (regex::Regex::new(r#"\/Users\/[^/]+\/"#).unwrap(), "/Users/*****/"),
@@ -67,7 +65,7 @@ pub fn start_game_output(stdout: ChildStdout, sender: FrontendHandle) {
             match reader.read_event_into(&mut buf) {
                 Err(e) => panic!("Error at position {}: {:?}", reader.error_position(), e),
                 Ok(quick_xml::events::Event::Eof) => {
-                    _ = sender.blocking_send(MessageToFrontend::AddGameOutput {
+                    sender.blocking_send(MessageToFrontend::AddGameOutput {
                         id,
                         time: chrono::Utc::now().timestamp_millis(),
                         thread: Arc::from("main"),
@@ -91,7 +89,7 @@ pub fn start_game_output(stdout: ChildStdout, sender: FrontendHandle) {
                                         let key = attribute.key.as_ref();
                                         match key {
                                             b"timestamp" => {
-                                                let Ok(value) = str::from_utf8(&*attribute.value) else {
+                                                let Ok(value) = str::from_utf8(&attribute.value) else {
                                                     continue;
                                                 };
                                                 if let Ok(parsed) = value.parse() {
@@ -111,14 +109,12 @@ pub fn start_game_output(stdout: ChildStdout, sender: FrontendHandle) {
                                             },
                                             b"thread" => {
                                                 // Try to reuse last thread to avoid duplicate string allocations
-                                                if let Some(last_thread) = &last_thread {
-                                                    if last_thread.as_bytes() == &*attribute.value {
-                                                        thread = last_thread.clone();
-                                                        continue;
-                                                    }
+                                                if let Some(last_thread) = &last_thread && last_thread.as_bytes() == &*attribute.value {
+                                                    thread = last_thread.clone();
+                                                    continue;
                                                 }
                                                 
-                                                let Ok(value) = str::from_utf8(&*attribute.value) else {
+                                                let Ok(value) = str::from_utf8(&attribute.value) else {
                                                     continue;
                                                 };
                                                 thread = Arc::from(value);
@@ -179,7 +175,7 @@ pub fn start_game_output(stdout: ChildStdout, sender: FrontendHandle) {
                                 if let Some(text) = text.as_mut() {
                                     let mut replaced = Cow::Borrowed(&**text);
                                     for (regex, replacement) in &replacements {
-                                        if let Cow::Owned(new) = regex.replace_all(&*replaced, *replacement) {
+                                        if let Cow::Owned(new) = regex.replace_all(&replaced, *replacement) {
                                             replaced = Cow::Owned(new);
                                         }
                                     }
@@ -190,7 +186,7 @@ pub fn start_game_output(stdout: ChildStdout, sender: FrontendHandle) {
                                 if let Some(throwable) = throwable.as_mut() {
                                     let mut replaced = Cow::Borrowed(&**throwable);
                                     for (regex, replacement) in &replacements {
-                                        if let Cow::Owned(new) = regex.replace_all(&*replaced, *replacement) {
+                                        if let Cow::Owned(new) = regex.replace_all(&replaced, *replacement) {
                                             replaced = Cow::Owned(new);
                                         }
                                     }
@@ -204,7 +200,7 @@ pub fn start_game_output(stdout: ChildStdout, sender: FrontendHandle) {
                                     if let Some(first) = split.next() && let Some(second) = split.next() {
                                         lines.push(Arc::from(first.trim_end()));
                                         lines.push(Arc::from(second.trim_end()));
-                                        while let Some(next) = split.next() {
+                                        for next in split {
                                             lines.push(Arc::from(next.trim_end()));
                                         }
                                     }
@@ -218,7 +214,7 @@ pub fn start_game_output(stdout: ChildStdout, sender: FrontendHandle) {
                                         
                                         lines.push(Arc::from(first.trim_end()));
                                         lines.push(Arc::from(second.trim_end()));
-                                        while let Some(next) = split.next() {
+                                        for next in split {
                                             lines.push(Arc::from(next.trim_end()));
                                         }
                                     }
@@ -232,14 +228,12 @@ pub fn start_game_output(stdout: ChildStdout, sender: FrontendHandle) {
                                     } else {
                                         Arc::new([text])
                                     }
+                                } else if let Some(throwable) = throwable {
+                                    Arc::new([throwable])
                                 } else {
-                                    if let Some(throwable) = throwable {
-                                        Arc::new([throwable])
-                                    } else {
-                                        Arc::new([empty_message.clone()])
-                                    }
+                                    Arc::new([empty_message.clone()])
                                 };
-                                _ = sender.blocking_send(MessageToFrontend::AddGameOutput {
+                                sender.blocking_send(MessageToFrontend::AddGameOutput {
                                     id,
                                     time: timestamp,
                                     thread,
@@ -264,34 +258,29 @@ pub fn start_game_output(stdout: ChildStdout, sender: FrontendHandle) {
                                 panic!("Don't know how to handle popping {:?} on {:?}", popped, last);
                             }
                         }
-                    }
-                    
+                    }  
                 },
                 Ok(quick_xml::events::Event::CData(e)) => {
                     match stack.last_mut() {
                         Some(ParseState::Message { content, .. }) => {
                             // Try to reuse last message to avoid duplicate string allocations
-                            if let Some(last_message) = &last_message {
-                                if last_message.as_bytes() == &*e {
-                                    *content = Some(last_message.clone());
-                                    continue;
-                                }
+                            if let Some(last_message) = &last_message && last_message.as_bytes() == &*e {
+                                *content = Some(last_message.clone());
+                                continue;
                             }
                             
-                            let message: Arc<str> = String::from_utf8_lossy(&*e).into_owned().into();
+                            let message: Arc<str> = String::from_utf8_lossy(&e).into_owned().into();
                             *content = Some(message.clone());
                             last_message = Some(message);
                         }
                         Some(ParseState::Throwable { content, .. }) => {
                             // Try to reuse last throwable to avoid duplicate string allocations
-                            if let Some(last_throwable) = &last_throwable {
-                                if last_throwable.as_bytes() == &*e {
-                                    *content = Some(last_throwable.clone());
-                                    continue;
-                                }
+                            if let Some(last_throwable) = &last_throwable && last_throwable.as_bytes() == &*e {
+                                *content = Some(last_throwable.clone());
+                                continue;
                             }
                             
-                            let message: Arc<str> = String::from_utf8_lossy(&*e).into_owned().into();
+                            let message: Arc<str> = String::from_utf8_lossy(&e).into_owned().into();
                             *content = Some(message.clone());
                             last_throwable = Some(message);
                         }
@@ -303,7 +292,7 @@ pub fn start_game_output(stdout: ChildStdout, sender: FrontendHandle) {
                     }
                 },
                 Ok(quick_xml::events::Event::Text(e)) => {
-                    let read_raw = String::from_utf8_lossy(&*e);
+                    let read_raw = String::from_utf8_lossy(&e);
                     if read_raw.trim_ascii().is_empty() {
                         continue;
                     }
@@ -311,7 +300,7 @@ pub fn start_game_output(stdout: ChildStdout, sender: FrontendHandle) {
                     if stack.is_empty() {
                         // We got text at the root level, fallback to writing raw text output
                         read_raw_text = true;
-                        raw_text.push_str(&*read_raw);
+                        raw_text.push_str(&read_raw);
                         if reader.buffer_position()+1 == reader.stream().offset() {
                             raw_text.push('<');
                         } else {
@@ -339,7 +328,7 @@ pub fn start_game_output(stdout: ChildStdout, sender: FrontendHandle) {
             let mut last: Option<&str> = None;
             for split in raw_text.split("\n") {
                 if let Some(last) = last {
-                    _ = sender.blocking_send(MessageToFrontend::AddGameOutput {
+                    sender.blocking_send(MessageToFrontend::AddGameOutput {
                         id,
                         time: Utc::now().timestamp_millis(),
                         thread: unknown_thread.clone(),
@@ -366,12 +355,12 @@ pub fn start_game_output(stdout: ChildStdout, sender: FrontendHandle) {
                     Ok(_) => {
                         let mut replaced = Cow::Borrowed(&*raw_text);
                         for (regex, replacement) in &replacements {
-                            if let Cow::Owned(new) = regex.replace_all(&*replaced, *replacement) {
+                            if let Cow::Owned(new) = regex.replace_all(&replaced, *replacement) {
                                 replaced = Cow::Owned(new);
                             }
                         }
                         
-                        _ = sender.blocking_send(MessageToFrontend::AddGameOutput {
+                        sender.blocking_send(MessageToFrontend::AddGameOutput {
                             id,
                             time: Utc::now().timestamp_millis(),
                             thread: unknown_thread.clone(),

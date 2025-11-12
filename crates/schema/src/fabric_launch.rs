@@ -8,8 +8,8 @@ use crate::fabric_loader_manifest::FabricLoaderVersion;
 #[derive(Deserialize, Debug)]
 #[cfg_attr(debug_assertions, serde(deny_unknown_fields))]
 pub struct FabricLaunch {
-    pub loader: FabricLoaderVersion,
-    pub intermediary: FabricIntermediaryVersion,
+    pub loader: Option<FabricLoaderVersion>,
+    pub intermediary: Option<FabricIntermediaryVersion>,
     #[serde(rename = "launcherMeta")]
     pub launcher_meta: FabricLaunchLauncherMeta,
 }

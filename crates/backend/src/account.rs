@@ -1,7 +1,7 @@
 use std::{io::Cursor, sync::Arc};
 
 use auth::models::{MinecraftAccessToken, MinecraftProfileResponse};
-use bridge::{account::Account, handle::BackendHandle, message::MessageToFrontend};
+use bridge::{account::Account, message::MessageToFrontend};
 use image::imageops::FilterType;
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
@@ -66,7 +66,7 @@ impl BackendAccount {
         };
         let head = Arc::clone(head);
         
-        let Ok(image) = image::load_from_memory(&*head) else {
+        let Ok(image) = image::load_from_memory(&head) else {
             return;
         };
         
@@ -76,7 +76,6 @@ impl BackendAccount {
             let mut head_png = Vec::new();
             let mut cursor = Cursor::new(&mut head_png);
             if resized.write_to(&mut cursor, image::ImageFormat::Png).is_ok() {
-                head_png.shrink_to_fit();
                 self.head_32x = Some(head_png.into());
             } else {
                 self.head_32x = Some(head);

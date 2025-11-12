@@ -16,6 +16,8 @@ pub struct LauncherDirectories {
     pub log_configs_dir: PathBuf,
     pub runtime_base_dir: PathBuf,
     
+    pub content_library_dir: PathBuf,
+    
     pub temp_dir: PathBuf,
     pub temp_natives_base_dir: PathBuf,
     
@@ -40,6 +42,8 @@ impl LauncherDirectories {
 
         let runtime_base_dir = launcher_dir.join("runtime");
 
+        let content_library_dir = launcher_dir.join("contentlibrary");
+        
         let temp_dir = launcher_dir.join("temp");
         let temp_natives_base_dir = temp_dir.join("natives");
         
@@ -59,6 +63,8 @@ impl LauncherDirectories {
             libraries_dir,
             log_configs_dir,
             runtime_base_dir,
+            
+            content_library_dir,
             
             temp_dir,
             temp_natives_base_dir,

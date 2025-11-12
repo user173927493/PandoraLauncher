@@ -1,4 +1,4 @@
-use std::{borrow::Cow, cell::RefCell, collections::HashMap, num::NonZeroUsize, ops::{Range, RangeInclusive}, rc::Rc, sync::{Arc, RwLock}, time::Instant};
+use std::{cell::RefCell, collections::HashMap, num::NonZeroUsize, ops::Range, rc::Rc, sync::Arc};
 
 use ftree::FenwickTree;
 use gpui::{prelude::*, *};
@@ -104,7 +104,7 @@ impl GameOutput {
         ))
     }
     
-    pub fn apply_pending(&mut self, window: &mut Window, cx: &mut App) {
+    pub fn apply_pending(&mut self, window: &mut Window, _cx: &mut App) {
         if self.shaped_log_levels.is_none() {
             let text_style = window.text_style();
             let font_size = text_style.font_size.to_pixels(window.rem_size());
@@ -362,7 +362,7 @@ impl Element for GameOutputList {
         global_id: Option<&GlobalElementId>,
         inspector_id: Option<&InspectorElementId>,
         bounds: Bounds<Pixels>,
-        request_layout: &mut Self::RequestLayoutState,
+        _request_layout: &mut Self::RequestLayoutState,
         window: &mut Window,
         cx: &mut App,
     ) -> Self::PrepaintState {
@@ -373,8 +373,7 @@ impl Element for GameOutputList {
             bounds.size,
             window,
             cx,
-            |_, _, hitbox, window, cx| {
-            }
+            |_, _, _, _, _| {}
         )
     }
 
@@ -383,8 +382,8 @@ impl Element for GameOutputList {
         global_id: Option<&GlobalElementId>,
         inspector_id: Option<&InspectorElementId>,
         bounds: Bounds<Pixels>,
-        _: &mut Self::RequestLayoutState,
-        layout: &mut Self::PrepaintState,
+        _request_layout: &mut Self::RequestLayoutState,
+        _prepaint: &mut Self::PrepaintState,
         window: &mut Window,
         cx: &mut App,
     ) {
@@ -845,7 +844,7 @@ fn paint_lines<'a, const REVERSE: bool>(
 pub struct GameOutputRoot {
     scrollbar_state: ScrollbarState,
     scroll_handler: ScrollHandler,
-    keep_alive: KeepAlive,
+    _keep_alive: KeepAlive,
     game_output: Entity<GameOutput>,
     search_state: Entity<InputState>,
     _search_task: Task<()>,
@@ -964,7 +963,7 @@ impl GameOutputRoot {
         Self {
             scrollbar_state: ScrollbarState::default(),
             scroll_handler: ScrollHandler { state: scroll_state },
-            keep_alive,
+            _keep_alive: keep_alive,
             game_output,
             search_state,
             _search_task: Task::ready(()),
@@ -983,7 +982,7 @@ impl GameOutputRoot {
             return;
         };
         
-        let item_state = self.game_output.update(cx, |game_output, cx| {
+        let item_state = self.game_output.update(cx, |game_output, _| {
             game_output.item_state.take()
         });
         
@@ -1012,7 +1011,7 @@ impl GameOutputRoot {
                 item_state.search_query = SharedString::new_static("");
                     
                 this.update_in(window, |this, window, cx| {
-                    this.game_output.update(cx, |game_output, cx| {
+                    this.game_output.update(cx, |game_output, _| {
                         game_output.item_state = Some(item_state);
                     });
                     this.search_state.update(cx, |input, cx| input.set_loading(false, window, cx));
@@ -1050,7 +1049,7 @@ impl GameOutputRoot {
                 item_state.search_query = search_pattern;
                     
                 this.update_in(window, |this, window, cx| {
-                    this.game_output.update(cx, |game_output, cx| {
+                    this.game_output.update(cx, |game_output, _| {
                         game_output.item_state = Some(item_state);
                     });
                     this.search_state.update(cx, |input, cx| input.set_loading(false, window, cx));
@@ -1065,7 +1064,7 @@ impl GameOutputRoot {
 }
 
 impl Render for GameOutputRoot {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let search = Input::new(&self.search_state)
             .prefix(Icon::new(IconName::Search).small());
         
@@ -1076,8 +1075,16 @@ impl Render for GameOutputRoot {
             .flex_1()
             .gap_4()
             .child(search)
-            .child(Button::new("top").label("Go to Top"))
-            .child(Button::new("bottom").label("Go to Bottom"))
+            .child(Button::new("top").label("Go to Top").on_click(cx.listener(|root, _, _, cx| {
+                let mut state = root.scroll_handler.state.borrow_mut();
+                state.scrolling = GameOutputScrolling::Top { offset: Pixels::ZERO };
+                cx.notify();
+            })))
+            .child(Button::new("bottom").label("Go to Bottom").on_click(cx.listener(|root, _, _, cx| {
+                let mut state = root.scroll_handler.state.borrow_mut();
+                state.scrolling = GameOutputScrolling::Bottom;
+                cx.notify();
+            })))
             .child(Button::new("upload").label("Upload"));
         
         v_flex()

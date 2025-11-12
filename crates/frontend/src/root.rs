@@ -1,6 +1,6 @@
 use std::sync::{Arc, RwLock};
 
-use bridge::{handle::BackendHandle, instance::InstanceID, message::{MessageToBackend, QuickPlayLaunch}, modal_action::ModalAction};
+use bridge::{handle::BackendHandle, install::ContentInstall, instance::InstanceID, message::{MessageToBackend, QuickPlayLaunch}, modal_action::ModalAction};
 use gpui::{prelude::*, *};
 use gpui_component::{v_flex, Root};
 
@@ -33,7 +33,7 @@ impl LauncherRoot {
 impl Render for LauncherRoot {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let sheet_layer = Root::render_sheet_layer(window, cx);
-        let modal_layer = Root::render_modal_layer(window, cx);
+        let dialog_layer = Root::render_dialog_layer(window, cx);
         let notification_layer = Root::render_notification_layer(window, cx);
 
         if let Some(message) = &*self.panic_message.read().unwrap() {
@@ -48,7 +48,7 @@ impl Render for LauncherRoot {
             .font_family("Inter 24pt")
             .child(self.ui.clone())
             .children(sheet_layer)
-            .children(modal_layer)
+            .children(dialog_layer)
             .children(notification_layer)
     }
 }
@@ -62,5 +62,19 @@ pub fn start_instance(id: InstanceID, name: SharedString, quick_play: Option<Qui
         modal_action: modal_action.clone(),
     });
     
-    modals::launch::show_launching_modal(window, cx, name, modal_action);
+    
+    let title: SharedString = format!("Launching {}", name).into();
+    modals::generic::show_modal(window, cx, title, "Error starting instance".into(), modal_action);
+}
+
+pub fn start_install(content_install: ContentInstall, backend_handle: &BackendHandle, window: &mut Window, cx: &mut App) {
+    let modal_action = ModalAction::default();
+    
+    backend_handle.blocking_send(MessageToBackend::InstallContent {
+        content: content_install.clone(),
+        modal_action: modal_action.clone(),
+    });
+    
+    let title: SharedString = format!("Installing...").into();
+    modals::generic::show_modal(window, cx, title, "Error installing content".into(), modal_action);
 }

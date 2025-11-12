@@ -1,4 +1,4 @@
-use std::{collections::HashMap, sync::{Arc, RwLock}};
+use std::sync::{Arc, RwLock};
 
 pub fn install_hook(panic_message: Arc<RwLock<Option<String>>>) {
     let old_hook = std::panic::take_hook();
@@ -49,10 +49,8 @@ impl std::fmt::Debug for PrettyBacktrace {
         let mut print_path =
             move |fmt: &mut std::fmt::Formatter<'_>, path: backtrace::BytesOrWideString<'_>| {
                 let path = path.into_path_buf();
-                if let Ok(cwd) = &cwd {
-                    if let Ok(suffix) = path.strip_prefix(cwd) {
-                        return std::fmt::Display::fmt(&suffix.display(), fmt);
-                    }
+                if let Ok(cwd) = &cwd && let Ok(suffix) = path.strip_prefix(cwd) {
+                    return std::fmt::Display::fmt(&suffix.display(), fmt);
                 }
                 std::fmt::Display::fmt(&path.display(), fmt)
             };

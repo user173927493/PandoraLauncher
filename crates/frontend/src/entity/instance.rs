@@ -1,7 +1,7 @@
-use std::{collections::HashMap, sync::Arc};
+use std::sync::Arc;
 
 use bridge::{instance::{InstanceID, InstanceModSummary, InstanceServerSummary, InstanceStatus, InstanceWorldSummary}, message::AtomicBridgeDataLoadState};
-use gpui::{App, AppContext, Context, Entity, EventEmitter, SharedString, Window};
+use gpui::{prelude::*, *};
 use indexmap::IndexMap;
 use schema::loader::Loader;
 
@@ -101,6 +101,18 @@ impl InstanceEntries {
              }
         });
     }
+
+    pub fn move_to_top<C: AppContext>(entity: &Entity<Self>, id: InstanceID, cx: &mut C) {
+        entity.update(cx, |entries, cx| {
+            if let Some(index) = entries.entries.get_index_of(&id) {
+                entries.entries.move_index(index, entries.entries.len() - 1); 
+                let (_, entry) = entries.entries.get_index(entries.entries.len() - 1).unwrap();
+                cx.emit(InstanceMovedToTopEvent {
+                    instance: entry.read(cx).clone()
+                });
+            }
+        });
+    }
 }
 
 #[derive(Clone)]
@@ -140,6 +152,12 @@ impl InstanceEntry {
 impl EventEmitter<InstanceAddedEvent> for InstanceEntries {}
 
 pub struct InstanceAddedEvent {
+    pub instance: InstanceEntry
+}
+
+impl EventEmitter<InstanceMovedToTopEvent> for InstanceEntries {}
+
+pub struct InstanceMovedToTopEvent {
     pub instance: InstanceEntry
 }
 

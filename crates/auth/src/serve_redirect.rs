@@ -1,6 +1,7 @@
-use std::{error::Error, io::Cursor, sync::{atomic::AtomicBool, Arc}, time::Duration};
+use std::{error::Error, io::Cursor, time::Duration};
 
 use tiny_http::{Response, Server};
+use tokio_util::sync::CancellationToken;
 use url::Url;
 
 use crate::{constants, models::{FinishedAuthorization, PendingAuthorization}};
@@ -17,18 +18,18 @@ pub enum ProcessAuthorizationError {
     CsrfMismatch,
     #[error("The response didn't include the code")]
     MissingCode,
-    #[error("The login was cancelled")]
-    Cancelled,
+    #[error("Cancelled by user")]
+    CancelledByUser,
 }
 
-pub fn start_server(pending_authroization: PendingAuthorization, cancel: Arc<AtomicBool>) -> Result<FinishedAuthorization, ProcessAuthorizationError> {
+pub fn start_server(pending_authroization: PendingAuthorization, cancel: CancellationToken) -> Result<FinishedAuthorization, ProcessAuthorizationError> {
     let server = Server::http(constants::SERVER_ADDRESS)
         .map_err(ProcessAuthorizationError::StartServer)?;
     
     loop {
         let request = server.recv_timeout(Duration::from_millis(50))?;
-        if cancel.load(std::sync::atomic::Ordering::Relaxed) {
-            break Err(ProcessAuthorizationError::Cancelled);
+        if cancel.is_cancelled() {
+            break Err(ProcessAuthorizationError::CancelledByUser);
         }
         let Some(request) = request else {
             continue;

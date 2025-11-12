@@ -1,10 +1,10 @@
-use std::{error::Error, ffi::OsString, sync::Arc};
+use std::{ffi::OsString, sync::Arc};
 
 use schema::{loader::Loader, modrinth::{ModrinthError, ModrinthRequest, ModrinthResult}, version_manifest::MinecraftVersionManifest};
 use ustr::Ustr;
 use uuid::Uuid;
 
-use crate::{account::Account, game_output::GameOutputLogLevel, instance::{InstanceID, InstanceModID, InstanceModSummary, InstanceServerSummary, InstanceStatus, InstanceWorldSummary}, keep_alive::{KeepAlive, KeepAliveHandle}, modal_action::ModalAction};
+use crate::{account::Account, game_output::GameOutputLogLevel, install::ContentInstall, instance::{InstanceID, InstanceModID, InstanceModSummary, InstanceServerSummary, InstanceStatus, InstanceWorldSummary}, keep_alive::{KeepAlive, KeepAliveHandle}, modal_action::ModalAction};
 
 #[derive(Debug)]
 pub enum MessageToBackend {
@@ -38,6 +38,10 @@ pub enum MessageToBackend {
         mod_id: InstanceModID,
         enabled: bool,
     },
+    DeleteMod {
+        id: InstanceID,
+        mod_id: InstanceModID,
+    },
     RequestModrinth {
         request: ModrinthRequest,
     },
@@ -45,6 +49,10 @@ pub enum MessageToBackend {
         uuid: Uuid,
         head_png: Arc<[u8]>,
         head_png_32x: Arc<[u8]>,
+    },
+    InstallContent {
+        content: ContentInstall,
+        modal_action: ModalAction,
     },
     DownloadAllMetadata
 }
@@ -107,7 +115,9 @@ pub enum MessageToFrontend {
         accounts: Arc<[Account]>,
         selected_account: Option<Uuid>,
     },
-    Refresh
+    Refresh,
+    CloseModal,
+    MoveInstanceToTop { id: InstanceID },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

@@ -1,9 +1,9 @@
-use std::sync::{atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering}, Arc, Mutex, RwLock};
+use std::sync::{atomic::{AtomicBool, AtomicUsize, Ordering}, Arc, Mutex, RwLock};
 
 use bridge::{handle::BackendHandle, message::MessageToBackend};
 use gpui::{prelude::*, *};
 use gpui_component::{
-    alert::Alert, button::{Button, ButtonGroup, ButtonVariants}, checkbox::Checkbox, form::form_field, h_flex, input::{Input, InputEvent, InputState}, resizable::{h_resizable, resizable_panel, ResizableState}, select::{SearchableVec, Select, SelectDelegate, SelectItem, SelectState}, sidebar::{Sidebar, SidebarFooter, SidebarGroup, SidebarHeader, SidebarMenu, SidebarMenuItem}, skeleton::Skeleton, table::{Column, ColumnFixed, ColumnSort, Table, TableDelegate, TableState}, tooltip::Tooltip, v_flex, ActiveTheme as _, Disableable, Icon, IconName, IndexPath, Root, Selectable, StyledExt, WindowExt
+    alert::Alert, button::{Button, ButtonGroup, ButtonVariants}, checkbox::Checkbox, h_flex, input::{Input, InputEvent, InputState}, select::{Select, SelectDelegate, SelectItem, SelectState}, skeleton::Skeleton, table::{Table, TableState}, v_flex, ActiveTheme as _, IconName, IndexPath, Selectable, StyledExt, WindowExt
 };
 use schema::{loader::Loader, version_manifest::MinecraftVersionType};
 
@@ -32,7 +32,7 @@ impl InstancesPage {
 }
 
 impl Render for InstancesPage {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let create_instance = Button::new("create_instance")
             .success()
             .icon(IconName::Plus)
@@ -69,7 +69,6 @@ impl SelectDelegate for VersionList {
         Self::Item: gpui_component::select::SelectItem<Value = V>,
         V: PartialEq
     {
-
         for (ix, item) in self.matched_versions.iter().enumerate() {
             if item.value() == value {
                 return Some(IndexPath::default().row(ix));
@@ -116,7 +115,7 @@ impl InstancesPage {
         let _name_input_subscription = {
             let name_invalid = Arc::clone(&name_invalid);
             let instance_names = Arc::clone(&instance_names);
-            cx.subscribe_in(&name_input_state, window, move |_, input_state, _: &InputEvent, window, cx| {
+            cx.subscribe_in(&name_input_state, window, move |_, input_state, _: &InputEvent, _, cx| {
                 let text = input_state.read(cx).value();
                 
                 if !text.as_str().is_empty() {
@@ -232,7 +231,7 @@ impl InstancesPage {
             actual: unnamed_instance_name.clone()
         }));
         
-        window.open_modal(cx, move |modal, window, cx| {
+        window.open_dialog(cx, move |modal, window, cx| {
             let _ = &subscription;
             let _ = &_name_input_subscription;
 
@@ -379,7 +378,6 @@ impl InstancesPage {
                     }
                 })
                 .overlay_closable(false)
-                .show_close(false)
                 .title("Create Instance")
                 .on_ok(move |_, _, cx| {
                     if name_is_invalid {

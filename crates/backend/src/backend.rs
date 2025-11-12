@@ -1,16 +1,13 @@
-use std::{collections::{HashMap, HashSet}, io::Cursor, path::{Path, PathBuf}, str::FromStr, sync::{atomic::AtomicBool, Arc}, time::{Duration, SystemTime}};
+use std::{collections::{HashMap, HashSet}, io::Cursor, path::{Path, PathBuf}, sync::Arc, time::{Duration, SystemTime}};
 
-use auth::{authenticator::{Authenticator, MsaAuthorizationError, XboxAuthenticateError}, credentials::{AccountCredentials, AUTH_STAGE_COUNT}, models::{MinecraftAccessToken, MinecraftProfileResponse, SkinState, TokenWithExpiry}, secret::PlatformSecretStorage, serve_redirect::{self, ProcessAuthorizationError}};
+use auth::{authenticator::{Authenticator, MsaAuthorizationError, XboxAuthenticateError}, credentials::{AccountCredentials, AUTH_STAGE_COUNT}, models::{MinecraftAccessToken, MinecraftProfileResponse, SkinState}, secret::PlatformSecretStorage, serve_redirect::{self, ProcessAuthorizationError}};
 use bridge::{handle::{BackendHandle, FrontendHandle}, instance::InstanceID, message::{MessageToBackend, MessageToFrontend}, modal_action::{ModalAction, ModalActionVisitUrl, ProgressTracker}};
 use image::imageops::FilterType;
 use reqwest::{redirect::Policy, StatusCode};
-use rustc_hash::FxHashMap;
-use schema::modrinth::{ModrinthRequest, ModrinthSearchRequest};
 use slab::Slab;
-use tokio::sync::{mpsc::{Receiver, Sender}, OnceCell};
-use uuid::Uuid;
+use tokio::sync::{mpsc::Receiver, OnceCell};
 
-use crate::{account::{BackendAccount, BackendAccountInfo, MinecraftLoginInfo}, directories::LauncherDirectories, instance::Instance, launch::Launcher, metadata::manager::{MetadataManager, MinecraftVersionManifestMetadata}, mod_metadata::ModMetadataManager, modrinth::data::ModrinthData};
+use crate::{account::BackendAccountInfo, directories::LauncherDirectories, instance::Instance, launch::Launcher, metadata::manager::{MetadataManager, MinecraftVersionManifestMetadata}, mod_metadata::ModMetadataManager, modrinth::data::ModrinthData};
 
 pub fn start(send: FrontendHandle, self_handle: BackendHandle, recv: Receiver<MessageToBackend>) {
     let runtime = tokio::runtime::Builder::new_multi_thread()
@@ -73,13 +70,17 @@ pub fn start(send: FrontendHandle, self_handle: BackendHandle, recv: Receiver<Me
     std::mem::forget(runtime);
 }
 
+#[derive(Clone, Copy)]
 pub enum WatchTarget {
     InstancesDir,
+    InvalidInstanceDir,
     InstanceDir {
         id: InstanceID,
     },
-    InvalidInstanceDir,
-    InstanceLevelDir {
+    InstanceDotMinecraftDir {
+        id: InstanceID
+    },
+    InstanceWorldDir {
         id: InstanceID,
     },
     InstanceSavesDir {
@@ -314,7 +315,7 @@ impl BackendState {
                 
                 for summary in summaries.iter() {
                     if self.watcher.watch(&summary.level_path, notify::RecursiveMode::NonRecursive).is_ok() {
-                        self.watching.insert(summary.level_path.clone(), WatchTarget::InstanceLevelDir {
+                        self.watching.insert(summary.level_path.clone(), WatchTarget::InstanceWorldDir {
                             id: instance.id,
                         });
                     }
@@ -343,16 +344,20 @@ impl BackendState {
     ) -> Result<(MinecraftProfileResponse, MinecraftAccessToken), LoginError> {
         let mut authenticator = Authenticator::new(self.http_client.clone());
         
-        login_tracker.set_total(AUTH_STAGE_COUNT as u32 + 1);
+        login_tracker.set_total(AUTH_STAGE_COUNT as usize + 1);
         login_tracker.notify().await;
         
         let mut last_auth_stage = None;
         let mut allow_backwards = true;
         loop {
+            if modal_action.has_requested_cancel() {
+                return Err(LoginError::CancelledByUser);
+            }
+            
             let stage_with_data = credentials.stage();
             let stage = stage_with_data.stage();
             
-            login_tracker.set_count(stage as u32 + 1);
+            login_tracker.set_count(stage as usize + 1);
             login_tracker.notify().await;
             
             if let Some(last_stage) = last_auth_stage {
@@ -377,8 +382,9 @@ impl BackendState {
                     });
                     self.send.send(MessageToFrontend::Refresh).await;
                     
-                    let finished = tokio::task::spawn_blocking(|| {
-                        serve_redirect::start_server(pending, Arc::new(AtomicBool::new(false)))
+                    let cancel = modal_action.request_cancel.clone();
+                    let finished = tokio::task::spawn_blocking(move || {
+                        serve_redirect::start_server(pending, cancel)
                     }).await.unwrap()?;
                     
                     modal_action.unset_visit_url();
@@ -463,7 +469,7 @@ impl BackendState {
                 auth::credentials::AuthStageWithData::AccessToken(access_token) => {
                     match authenticator.get_minecraft_profile(&access_token).await {
                         Ok(profile) => {
-                            login_tracker.set_count(AUTH_STAGE_COUNT as u32 + 1);
+                            login_tracker.set_count(AUTH_STAGE_COUNT as usize + 1);
                             login_tracker.notify().await;
                             
                             return Ok((profile, access_token));
@@ -527,7 +533,6 @@ impl BackendState {
                 return;
             }
             
-            head_bytes.shrink_to_fit();
             let head_png: Arc<[u8]> = Arc::from(head_bytes);
             
             let head_png_32x = if head.width() != 32 || head.height() != 32 {
@@ -536,7 +541,6 @@ impl BackendState {
                 let mut head_png_32x = Vec::new();
                 let mut cursor = Cursor::new(&mut head_png_32x);
                 if resized.write_to(&mut cursor, image::ImageFormat::Png).is_ok() {
-                    head_png_32x.shrink_to_fit();
                     head_png_32x.into()
                 } else {
                     head_png.clone()
@@ -582,4 +586,6 @@ pub enum LoginError {
     MsaAuthorizationError(#[from] MsaAuthorizationError),
     #[error("XboxLive authentication error: {0}")]
     XboxAuthenticateError(#[from] XboxAuthenticateError),
+    #[error("Cancelled by user")]
+    CancelledByUser,
 }

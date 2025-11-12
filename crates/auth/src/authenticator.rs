@@ -1,10 +1,7 @@
 use std::{cell::OnceCell, time::Duration};
 
 use chrono::Utc;
-use oauth2::{basic::{BasicClient, BasicErrorResponse, BasicErrorResponseType, BasicRequestTokenError, BasicRevocationErrorResponse, BasicTokenIntrospectionResponse, BasicTokenResponse, BasicTokenType}, AuthUrl, AuthorizationCode, Client, ClientId, CsrfToken, EmptyExtraTokenFields, EndpointNotSet, EndpointSet, HttpClientError, PkceCodeChallenge, PkceCodeVerifier, RedirectUrl, RefreshToken, RequestTokenError, ResponseType, Scope, StandardErrorResponse, StandardRevocableToken, StandardTokenResponse, TokenResponse, TokenUrl};
-use serde::{Deserialize, Serialize};
-use url::Url;
-use uuid::Uuid;
+use oauth2::{basic::{BasicErrorResponse, BasicErrorResponseType, BasicRevocationErrorResponse, BasicTokenIntrospectionResponse, BasicTokenResponse}, AuthUrl, AuthorizationCode, Client, ClientId, CsrfToken, EndpointNotSet, EndpointSet, HttpClientError, PkceCodeChallenge, RedirectUrl, RefreshToken, RequestTokenError, Scope, StandardErrorResponse, StandardRevocableToken, TokenResponse, TokenUrl};
 
 use crate::{constants, models::{FinishedAuthorization, MinecraftAccessToken, MinecraftLoginWithXboxRequest, MinecraftLoginWithXboxResponse, MinecraftProfileResponse, MsaTokens, PendingAuthorization, TokenWithExpiry, XboxLiveAuthenticateRequest, XboxLiveAuthenticateRequestProperties, XboxLiveAuthenticateResponse, XboxLiveSecurityTokenRequest, XboxLiveSecurityTokenRequestProperties, XboxLiveSecurityTokenResponse, XstsToken}};
 

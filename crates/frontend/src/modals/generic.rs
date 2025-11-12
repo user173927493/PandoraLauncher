@@ -2,18 +2,16 @@ use std::sync::Arc;
 
 use bridge::modal_action::ModalAction;
 use gpui::{prelude::*, *};
-use gpui_component::{button::{Button, ButtonVariants}, v_flex, WindowExt};
+use gpui_component::{button::{Button, ButtonVariants}, dialog::DialogButtonProps, v_flex, WindowExt};
 
 use crate::component::{error_alert::ErrorAlert, progress_bar::{ProgressBar, ProgressBarColor}};
 
-pub fn show_launching_modal(window: &mut Window, cx: &mut App, name: SharedString, modal_action: ModalAction) {
-    let title: SharedString = format!("Launching {}", name).into();
-    
-    window.open_modal(cx, move |modal, window, cx| {
+pub fn show_modal(window: &mut Window, cx: &mut App, title: SharedString, error_title: SharedString, modal_action: ModalAction) {
+    window.open_dialog(cx, move |modal, window, cx| {
         if let Some(error) = &*modal_action.error.read().unwrap() {
             let error_widget = ErrorAlert::new(
                 "error",
-                "Error starting instance".into(),
+                error_title.clone(),
                 error.clone().into()
             );
 
@@ -23,12 +21,19 @@ pub fn show_launching_modal(window: &mut Window, cx: &mut App, name: SharedStrin
                 .child(v_flex().gap_3().child(error_widget));
         }
         
+        if modal_action.refcnt() <= 1 {
+            modal_action.set_finished();
+        }
+        
+        let mut is_finishing = false;
         let mut modal_opacity = 1.0;
         if let Some(finished_at) = modal_action.get_finished_at() {
+            is_finishing = true;
+            
             let elapsed = finished_at.elapsed().as_secs_f32();
             window.request_animation_frame();
             if elapsed >= 2.0 {
-                window.close_modal(cx);
+                window.close_dialog(cx);
                 return modal.opacity(0.0);
             } else if elapsed >= 1.0 {
                 modal_opacity = 2.0 - elapsed;
@@ -80,6 +85,29 @@ pub fn show_launching_modal(window: &mut Window, cx: &mut App, name: SharedStrin
 
         let progress = v_flex().gap_2().children(progress_entries);
 
-        modal.title(title.clone()).child(progress).opacity(modal_opacity)
+        let request_cancel = modal_action.request_cancel.clone();
+        let modal = modal.title(title.clone())
+            .close_button(false)
+            .child(progress)
+            .opacity(modal_opacity);
+        if is_finishing {
+            modal
+                .button_props(DialogButtonProps::default().ok_variant(gpui_component::button::ButtonVariant::Secondary))
+                .footer(|ok, _, window, cx| {
+                    vec![(ok)(window, cx)]
+                })
+        } else {
+            modal
+                .footer(|_, cancel, window, cx| {
+                    vec![(cancel)(window, cx)]
+                })
+                .overlay_closable(false)
+                .keyboard(false)
+                .on_cancel(move |_, _, _| {
+                    request_cancel.cancel();
+                    false
+                })
+        }
+        
     });
 }

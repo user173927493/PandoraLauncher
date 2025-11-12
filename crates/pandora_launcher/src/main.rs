@@ -1,6 +1,6 @@
 #![deny(unused_must_use)]
 
-use std::{collections::HashMap, sync::Arc, time::Instant};
+use std::sync::Arc;
 
 use bridge::handle::{BackendHandle, FrontendHandle};
 pub mod panic;

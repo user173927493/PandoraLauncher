@@ -3,7 +3,7 @@
 use std::{collections::HashMap, sync::{Arc, RwLock}};
 
 use bridge::{handle::BackendHandle, message::{BridgeNotificationType, MessageToFrontend}};
-use gpui::{http_client::HttpClient, prelude::*, *};
+use gpui::*;
 use gpui_component::{notification::{Notification, NotificationType}, Root, ThemeMode, WindowExt};
 use indexmap::IndexMap;
 use tokio::sync::mpsc::Receiver;
@@ -104,6 +104,8 @@ pub fn start(panic_message: Arc<RwLock<Option<String>>>, backend_handle: Backend
                 };
                 
                 {
+                    let main_window = window.window_handle();
+                    
                     let data = data.clone();
                     let mut game_output_windows = HashMap::new();
                     let window_handle = window.window_handle();
@@ -150,7 +152,14 @@ pub fn start(panic_message: Arc<RwLock<Option<String>>>, backend_handle: Backend
                                     }).unwrap();
                                 },
                                 MessageToFrontend::Refresh => {
-                                    let _ = cx.refresh();
+                                    _ = main_window.update(cx, |_, window, _| {
+                                        window.refresh();
+                                    });
+                                },
+                                MessageToFrontend::CloseModal => {
+                                    _ = main_window.update(cx, |_, window, cx| {
+                                        window.close_all_dialogs(cx);
+                                    });
                                 },
                                 MessageToFrontend::CreateGameOutputWindow { id, keep_alive } => {
                                     _ = cx.open_window(WindowOptions::default(), |window, cx| {
@@ -177,6 +186,9 @@ pub fn start(panic_message: Arc<RwLock<Option<String>>>, backend_handle: Backend
                                 MessageToFrontend::ModrinthDataUpdated { request, result, alive_handle } => {
                                     FrontendModrinthData::set(&data.modrinth, request, result, alive_handle, cx);
                                 },
+                                MessageToFrontend::MoveInstanceToTop { id } => {
+                                    InstanceEntries::move_to_top(&data.instances, id, cx);
+                                }
                             }
                         }
                     }).detach();

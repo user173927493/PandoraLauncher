@@ -10,3 +10,4 @@ serde.workspace = true
 serde-untagged.workspace = true
 ustr.workspace = true
 thiserror.workspace = true
+enumset.workspace = true

@@ -56,10 +56,8 @@ impl ModMetadataManager {
         };
         
         let mut png_icon: Option<Arc<[u8]>> = None;
-        if let Some(icon) = icon {
-            if let Ok(icon_file) = archive.by_name(&*icon) {
-                png_icon = load_icon(icon_file);
-            }
+        if let Some(icon) = icon && let Ok(icon_file) = archive.by_name(&icon) {
+            png_icon = load_icon(icon_file);
         }
         
         let authors = if let Some(authors) = fabric_mod_json.authors && !authors.is_empty() {
@@ -94,7 +92,7 @@ fn load_icon(mut icon_file: ZipFile<'_, &mut File>) -> Option<Arc<[u8]>> {
         return None;
     };
     
-    let Ok(image) = image::load_from_memory(&*icon_bytes) else {
+    let Ok(image) = image::load_from_memory(&icon_bytes) else {
         return None;
     };
     
@@ -115,8 +113,7 @@ fn load_icon(mut icon_file: ZipFile<'_, &mut File>) -> Option<Arc<[u8]>> {
         }
     }
     
-    icon_bytes.shrink_to_fit();
-    return Some(icon_bytes.into());
+    Some(icon_bytes.into())
 }
 
 #[derive(Deserialize, Debug)]
@@ -125,20 +122,20 @@ struct FabricModJson {
     id: Arc<str>,
     version: Arc<str>,
     name: Option<Arc<str>>,
-    description: Option<Arc<str>>,
+    // description: Option<Arc<str>>,
     authors: Option<Vec<Person>>,
     icon: Option<Icon>,
-    #[serde(alias = "requires")]
-    depends: Option<HashMap<Arc<str>, Dependency>>,
-    breaks: Option<HashMap<Arc<str>, Dependency>>,
+    // #[serde(alias = "requires")]
+    // depends: Option<HashMap<Arc<str>, Dependency>>,
+    // breaks: Option<HashMap<Arc<str>, Dependency>>,
 }
 
-#[derive(Deserialize, Debug)]
-#[serde(untagged)]
-enum Dependency {
-    Single(Arc<str>),
-    Multiple(Vec<Arc<str>>)
-}
+// #[derive(Deserialize, Debug)]
+// #[serde(untagged)]
+// enum Dependency {
+//     Single(Arc<str>),
+//     Multiple(Vec<Arc<str>>)
+// }
 
 #[derive(Deserialize, Debug)]
 #[serde(untagged)]

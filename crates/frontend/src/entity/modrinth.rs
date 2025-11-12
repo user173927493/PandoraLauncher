@@ -1,8 +1,8 @@
-use std::{collections::HashMap, error::Error, sync::{atomic::{AtomicBool, Ordering}, Arc}};
+use std::collections::HashMap;
 
 use bridge::{handle::BackendHandle, keep_alive::KeepAliveHandle, message::MessageToBackend};
-use gpui::{App, AppContext, Entity};
-use schema::{modrinth::{ModrinthError, ModrinthRequest, ModrinthResult}, version_manifest::MinecraftVersionManifest};
+use gpui::{prelude::*, *};
+use schema::modrinth::{ModrinthError, ModrinthRequest, ModrinthResult};
 
 pub enum FrontendModrinthDataState {
     Loading,

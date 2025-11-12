@@ -1,11 +1,6 @@
-use gpui::{
-    div, prelude::FluentBuilder as _, px, rems, App, ClickEvent, ElementId, Empty, Hsla,
-    InteractiveElement, IntoElement, ParentElement as _, RenderOnce, SharedString,
-    StatefulInteractiveElement, StyleRefinement, Styled, Window,
-};
-
+use gpui::{prelude::*, *};
 use gpui_component::{
-    h_flex, text::{Text, TextViewStyle}, v_flex, ActiveTheme as _, Icon, IconName, Sizable, Size, StyledExt
+    h_flex, v_flex, ActiveTheme as _, IconName, StyledExt
 };
 
 #[derive(IntoElement)]

@@ -1,9 +1,9 @@
-use std::{ffi::OsString, sync::{atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering}, Arc, RwLock}};
+use std::{ffi::OsString, sync::{atomic::Ordering, Arc}};
 
 use bridge::{handle::BackendHandle, instance::{InstanceID, InstanceServerSummary, InstanceWorldSummary}, message::{AtomicBridgeDataLoadState, MessageToBackend, QuickPlayLaunch}};
 use gpui::{prelude::*, *};
 use gpui_component::{
-    alert::Alert, button::{Button, ButtonGroup, ButtonVariants}, checkbox::Checkbox, form::form_field, group_box::GroupBox, h_flex, input::{Input, InputEvent, InputState}, list::{List, ListDelegate, ListItem, ListState}, resizable::{h_resizable, resizable_panel, ResizableState}, select::{SearchableVec, Select, SelectDelegate, SelectItem, SelectState}, sidebar::{Sidebar, SidebarFooter, SidebarGroup, SidebarHeader, SidebarMenu, SidebarMenuItem}, skeleton::Skeleton, tab::{Tab, TabBar}, table::{Column, ColumnFixed, ColumnSort, Table, TableDelegate}, v_flex, ActiveTheme as _, Icon, IconName, IndexPath, Root, Selectable, Sizable, StyledExt
+    button::{Button, ButtonVariants}, h_flex, list::{ListDelegate, ListItem, ListState}, v_flex, ActiveTheme as _, Icon, IndexPath
 };
 
 use crate::{entity::instance::InstanceEntry, png_render_cache, root};
@@ -81,7 +81,7 @@ impl InstanceQuickplaySubpage {
 }
 
 impl Render for InstanceQuickplaySubpage {
-    fn render(&mut self, window: &mut gpui::Window, cx: &mut gpui::Context<Self>) -> impl gpui::IntoElement {
+    fn render(&mut self, _window: &mut gpui::Window, cx: &mut gpui::Context<Self>) -> impl gpui::IntoElement {
         let theme = cx.theme();
         
         let state = self.worlds_state.load(Ordering::SeqCst);
@@ -122,14 +122,14 @@ pub struct WorldsListDelegate {
 impl ListDelegate for WorldsListDelegate {
     type Item = ListItem;
 
-    fn items_count(&self, section: usize, cx: &App) -> usize {
+    fn items_count(&self, _section: usize, _cx: &App) -> usize {
         self.searched.len()
     }
 
     fn render_item(
         &self,
         ix: IndexPath,
-        window: &mut Window,
+        _window: &mut Window,
         cx: &mut App,
     ) -> Option<Self::Item> {
         let summary = self.searched.get(ix.row)?;
@@ -166,17 +166,17 @@ impl ListDelegate for WorldsListDelegate {
     
     fn set_selected_index(
         &mut self,
-        ix: Option<IndexPath>,
-        window: &mut Window,
-        cx: &mut Context<ListState<Self>>,
+        _ix: Option<IndexPath>,
+        _window: &mut Window,
+        _cx: &mut Context<ListState<Self>>,
     ) {
     }
     
     fn perform_search(
         &mut self,
         query: &str,
-        window: &mut Window,
-        cx: &mut Context<ListState<Self>>,
+        _window: &mut Window,
+        _cx: &mut Context<ListState<Self>>,
     ) -> Task<()> {
         self.searched = self.worlds.iter()
             .filter(|w| w.title.contains(query))
@@ -198,14 +198,14 @@ pub struct ServersListDelegate {
 impl ListDelegate for ServersListDelegate {
     type Item = ListItem;
 
-    fn items_count(&self, section: usize, cx: &App) -> usize {
+    fn items_count(&self, _section: usize, _cx: &App) -> usize {
         self.searched.len()
     }
 
     fn render_item(
         &self,
         ix: IndexPath,
-        window: &mut Window,
+        _window: &mut Window,
         cx: &mut App,
     ) -> Option<Self::Item> {
         let summary = self.searched.get(ix.row)?;
@@ -242,17 +242,17 @@ impl ListDelegate for ServersListDelegate {
     
     fn set_selected_index(
         &mut self,
-        ix: Option<IndexPath>,
-        window: &mut Window,
-        cx: &mut Context<ListState<Self>>,
+        _ix: Option<IndexPath>,
+        _window: &mut Window,
+        _cx: &mut Context<ListState<Self>>,
     ) {
     }
     
     fn perform_search(
         &mut self,
         query: &str,
-        window: &mut Window,
-        cx: &mut Context<ListState<Self>>,
+        _window: &mut Window,
+        _cx: &mut Context<ListState<Self>>,
     ) -> Task<()> {
         self.searched = self.servers.iter()
             .filter(|w| w.name.contains(query))

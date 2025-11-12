@@ -25,11 +25,13 @@ pub struct ModrinthErrorResponse {
 #[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub enum ModrinthRequest {
     Search(ModrinthSearchRequest),
+    ProjectVersions(ModrinthProjectVersionsRequest)
 }
 
 #[derive(Debug, Clone)]
 pub enum ModrinthResult {
     Search(ModrinthSearchResult),
+    ProjectVersions(ModrinthProjectVersionsResult),
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize)]
@@ -39,6 +41,11 @@ pub struct ModrinthSearchRequest {
     pub index: ModrinthSearchIndex,
     pub offset: usize,
     pub limit: usize,
+}
+
+#[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+pub struct ModrinthProjectVersionsRequest {
+    pub project_id: Arc<str>,
 }
 
 
@@ -62,7 +69,7 @@ pub struct ModrinthSearchResult {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct ModrinthHit {
-    // pub slug: Option<Arc<str>>,
+    pub slug: Option<Arc<str>>,
     pub title: Option<Arc<str>>,
     pub description: Option<Arc<str>>,
     // pub categories: Option<Arc<[Arc<str>]>>,
@@ -93,6 +100,7 @@ pub enum ModrinthSideRequirement {
     Required,
     Optional,
     Unsupported,
+    #[serde(other)]
     Unknown,
 }
 
@@ -103,4 +111,116 @@ pub enum ModrinthProjectType {
     ModPack,
     ResourcePack,
     Shader,
+    #[serde(other)]
+    Other,
+}
+
+impl ModrinthProjectType {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            ModrinthProjectType::Mod => "mod",
+            ModrinthProjectType::ModPack => "modpack",
+            ModrinthProjectType::ResourcePack => "resourcepack",
+            ModrinthProjectType::Shader => "shader",
+            ModrinthProjectType::Other => "other",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct ModrinthProjectVersionsResult(pub Arc<[ModrinthProjectVersion]>);
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct ModrinthProjectVersion {
+    pub game_versions: Option<Arc<[Ustr]>>,
+    pub loaders: Option<Arc<[ModrinthLoader]>>,
+    pub id: Arc<str>,
+    pub project_id: Arc<str>,
+    pub name: Option<Arc<str>>,
+    pub version_number: Option<Arc<str>>,
+    pub version_type: Option<ModrinthVersionType>,
+    pub status: Option<ModrinthVersionStatus>,
+    pub files: Arc<[ModrinthFile]>,
+}
+
+#[derive(enumset::EnumSetType, Debug, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ModrinthLoader {
+    // Mods
+    Fabric,
+    Forge,
+    NeoForge,
+    // Resourcepacks
+    Minecraft,
+    // Shaders
+    Iris,
+    Optifine,
+    Canvas,
+    // Other
+    #[serde(other)]
+    Unknown,
+}
+
+impl ModrinthLoader {
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Fabric => "Fabric",
+            Self::Forge => "Forge",
+            Self::NeoForge => "NeoForge",
+            Self::Minecraft => "Minecraft",
+            Self::Iris => "Iris",
+            Self::Optifine => "Optifine",
+            Self::Canvas => "Canvas",
+            Self::Unknown => "Unknown",
+        }
+    }
+    
+    pub fn from_name(str: &str) -> Self {
+        match str {
+            "Fabric" | "fabric" => Self::Fabric,
+            "Forge" | "forge" => Self::Forge,
+            "NeoForge" | "neoforge" => Self::NeoForge,
+            "Minecraft" | "minecraft" => Self::Minecraft,
+            "Iris" | "iris" => Self::Iris,
+            "Optifine" | "optifine" => Self::Optifine,
+            "Canvas" | "canvas" => Self::Canvas,
+            _ => Self::Unknown
+        }
+    }
+}
+
+#[derive(Debug, Copy, Clone, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum ModrinthVersionType {
+    Release,
+    Beta,
+    Alpha,
+    #[serde(other)]
+    Other,
+}
+
+#[derive(Debug, Copy, Clone, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum ModrinthVersionStatus {
+    Listed,
+    Archived,
+    Draft,
+    Unlisted,
+    Scheduled,
+    #[serde(other)]
+    Unknown,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct ModrinthFile {
+    pub hashes: ModrinthHashes,
+    pub url: Arc<str>,
+    pub filename: Arc<str>,
+    pub primary: bool,
+    pub size: usize,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct ModrinthHashes {
+    pub sha1: Arc<str>,
 }

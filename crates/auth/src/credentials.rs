@@ -2,7 +2,6 @@ use std::sync::Arc;
 
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 
 use crate::models::{MinecraftAccessToken, TokenWithExpiry, XstsToken};
 

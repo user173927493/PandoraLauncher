@@ -491,6 +491,7 @@ dependencies = [
  "sha2",
  "thiserror 2.0.17",
  "tiny_http",
+ "tokio-util",
  "url",
  "uuid",
 ]
@@ -559,7 +560,6 @@ dependencies = [
  "directories",
  "flate2",
  "futures",
- "futures-util",
  "hex",
  "image",
  "indexmap",
@@ -824,6 +824,7 @@ dependencies = [
  "atomic_enum",
  "schema",
  "tokio",
+ "tokio-util",
  "ustr",
  "uuid",
 ]
@@ -1550,6 +1551,40 @@ dependencies = [
 ]
 
 [[package]]
+name = "darling"
+version = "0.21.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9cdf337090841a411e2a7f3deb9187445851f91b309c0c0a29e05f74a00a48c0"
+dependencies = [
+ "darling_core",
+ "darling_macro",
+]
+
+[[package]]
+name = "darling_core"
+version = "0.21.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1247195ecd7e3c85f83c8d2a366e4210d588e802133e1e355180a9870b517ea4"
+dependencies = [
+ "fnv",
+ "ident_case",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.108",
+]
+
+[[package]]
+name = "darling_macro"
+version = "0.21.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d38308df82d1080de0afee5d069fa14b0326a88c14f15c5ccda35b4a6c414c81"
+dependencies = [
+ "darling_core",
+ "quote",
+ "syn 2.0.108",
+]
+
+[[package]]
 name = "dashmap"
 version = "5.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1899,6 +1934,27 @@ version = "0.7.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "67c78a4d8fdf9953a5c9d458f9efe940fd97a0cab0941c075a813ac594733827"
 dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.108",
+]
+
+[[package]]
+name = "enumset"
+version = "1.1.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "25b07a8dfbbbfc0064c0a6bdf9edcf966de6b1c33ce344bdeca3b41615452634"
+dependencies = [
+ "enumset_derive",
+]
+
+[[package]]
+name = "enumset_derive"
+version = "0.14.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f43e744e4ea338060faee68ed933e46e722fb7f3617e722a5772d7e856d8b3ce"
+dependencies = [
+ "darling",
  "proc-macro2",
  "quote",
  "syn 2.0.108",
@@ -2298,10 +2354,12 @@ dependencies = [
  "backtrace",
  "bridge",
  "chrono",
+ "enumset",
  "ftree",
  "gpui",
  "gpui-component",
  "heapless",
+ "hex",
  "image",
  "indexmap",
  "intrusive-collections",
@@ -2712,7 +2770,7 @@ dependencies = [
 
 [[package]]
 name = "gpui-component"
-version = "0.4.0-preview0"
+version = "0.4.0-preview1"
 dependencies = [
  "aho-corasick",
  "anyhow",
@@ -2749,7 +2807,7 @@ dependencies = [
 
 [[package]]
 name = "gpui-component-macros"
-version = "0.4.0-preview0"
+version = "0.4.0-preview1"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3326,6 +3384,12 @@ dependencies = [
  "zerotrie",
  "zerovec",
 ]
+
+[[package]]
+name = "ident_case"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b9e0384b61958566e926dc50660321d12159025e767c18e043daf26b70104c39"
 
 [[package]]
 name = "idna"
@@ -5626,6 +5690,7 @@ dependencies = [
  "bytes",
  "encoding_rs",
  "futures-core",
+ "futures-util",
  "h2",
  "http",
  "http-body",
@@ -5650,12 +5715,14 @@ dependencies = [
  "tokio",
  "tokio-native-tls",
  "tokio-rustls",
+ "tokio-util",
  "tower",
  "tower-http",
  "tower-service",
  "url",
  "wasm-bindgen",
  "wasm-bindgen-futures",
+ "wasm-streams",
  "web-sys",
  "webpki-roots",
 ]
@@ -6053,6 +6120,7 @@ name = "schema"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "enumset",
  "indexmap",
  "serde",
  "serde-untagged",
@@ -7192,9 +7260,9 @@ dependencies = [
 
 [[package]]
 name = "tokio-util"
-version = "0.7.16"
+version = "0.7.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "14307c986784f72ef81c89db7d9e28d6ac26d16213b109ea501696195e6e3ce5"
+checksum = "2efa149fe76073d6e8fd97ef4f4eca7b67f599660115591483572e406e165594"
 dependencies = [
  "bytes",
  "futures-core",

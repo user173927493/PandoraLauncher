@@ -4,7 +4,7 @@ use bridge::{handle::FrontendHandle, message::MessageToFrontend};
 use schema::{assets_index::AssetsIndex, fabric_launch::FabricLaunch, fabric_loader_manifest::{FabricLoaderManifest, FABRIC_LOADER_MANIFEST_URL}, java_runtime_component::JavaRuntimeComponentManifest, java_runtimes::{JavaRuntimes, JAVA_RUNTIMES_URL}, version::MinecraftVersion, version_manifest::{MinecraftVersionLink, MinecraftVersionManifest, MOJANG_VERSION_MANIFEST_URL}};
 use serde::de::DeserializeOwned;
 use sha1::{Digest, Sha1};
-use tokio::{runtime::Handle, sync::mpsc::Sender, task::JoinHandle};
+use tokio::{runtime::Handle, task::JoinHandle};
 use ustr::Ustr;
 
 type MetaLoadStateWrapper<T> = Arc<tokio::sync::Mutex<MetaLoadState<T>>>;

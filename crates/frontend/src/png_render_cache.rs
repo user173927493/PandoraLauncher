@@ -1,7 +1,7 @@
 use std::{rc::Rc, sync::{atomic::Ordering, Arc, Mutex}, time::{Duration, Instant}};
 
 use atomic_time::AtomicInstant;
-use gpui::{App, RenderImage, Window};
+use gpui::{App, RenderImage};
 use image::Frame;
 use intrusive_collections::{intrusive_adapter, LinkedList, LinkedListLink};
 use rustc_hash::FxHashMap;

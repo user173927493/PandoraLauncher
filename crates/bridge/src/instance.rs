@@ -51,7 +51,8 @@ pub struct InstanceServerSummary {
 pub struct InstanceModSummary {
     pub mod_summary: Arc<ModSummary>,
     pub id: InstanceModID,
-    pub file_name: Arc<str>,
+    pub filename: Arc<str>,
+    pub filename_hash: u64,
     pub path: Arc<Path>,
     pub enabled: bool,
 }

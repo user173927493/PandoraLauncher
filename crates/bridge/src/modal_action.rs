@@ -1,12 +1,19 @@
-use std::{ops::Deref, sync::{atomic::{AtomicBool, AtomicU32, Ordering}, Arc, RwLock}, time::Instant};
+use std::{ops::Deref, sync::{atomic::{AtomicBool, AtomicUsize, Ordering}, Arc, RwLock}, time::Instant};
 
 use atomic_time::AtomicOptionInstant;
+use tokio_util::sync::CancellationToken;
 
 use crate::{handle::FrontendHandle, message::MessageToFrontend};
 
 #[derive(Default, Clone, Debug)]
 pub struct ModalAction {
     inner: Arc<ModalActionInner>,
+}
+
+impl ModalAction {
+    pub fn refcnt(&self) -> usize {
+        Arc::strong_count(&self.inner)
+    }
 }
 
 impl Deref for ModalAction {
@@ -17,6 +24,7 @@ impl Deref for ModalAction {
     }
 }
 
+#[derive(Debug)]
 pub struct ModalActionVisitUrl {
     pub message: Arc<str>,
     pub url: Arc<str>,
@@ -28,6 +36,7 @@ pub struct ModalActionInner {
     pub error: RwLock<Option<Arc<str>>>,
     pub visit_url: RwLock<Option<ModalActionVisitUrl>>,
     pub trackers: ProgressTrackers,
+    pub request_cancel: CancellationToken,
 }
 
 impl ModalActionInner {
@@ -50,6 +59,14 @@ impl ModalActionInner {
     pub fn unset_visit_url(&self) {
         *self.visit_url.write().unwrap() = None;
     }
+    
+    pub fn request_cancel(&self) {
+        self.request_cancel.cancel();
+    }
+    
+    pub fn has_requested_cancel(&self) -> bool {
+        self.request_cancel.is_cancelled()
+    }
 }
 
 impl std::fmt::Debug for ModalActionInner {
@@ -57,7 +74,9 @@ impl std::fmt::Debug for ModalActionInner {
         f.debug_struct("ModalActionInner")
             .field("finished_at", &self.finished_at.load(Ordering::Relaxed))
             .field("error", &self.error)
+            .field("visit_url", &self.visit_url)
             .field("trackers", &self.trackers)
+            .field("request_cancel", &self.request_cancel)
             .finish()
     }
 }
@@ -84,8 +103,8 @@ pub struct ProgressTracker {
 }
 
 struct ProgressTrackerInner {
-    count: AtomicU32,
-    total: AtomicU32,
+    count: AtomicUsize,
+    total: AtomicUsize,
     finished_at: AtomicOptionInstant,
     finished_with_error: AtomicBool,
     title: RwLock<Arc<str>>,
@@ -105,8 +124,8 @@ impl ProgressTracker {
     pub fn new(title: Arc<str>, sender: FrontendHandle) -> Self {
         Self {
             inner: Arc::new(ProgressTrackerInner {
-                count: AtomicU32::new(0),
-                total: AtomicU32::new(0),
+                count: AtomicUsize::new(0),
+                total: AtomicUsize::new(0),
                 finished_at: AtomicOptionInstant::none(),
                 finished_with_error: AtomicBool::new(false),
                 title: RwLock::new(title),
@@ -132,7 +151,7 @@ impl ProgressTracker {
         }
     }
 
-    pub fn get(&self) -> (u32, u32) {
+    pub fn get(&self) -> (usize, usize) {
         (
             self.inner.count.load(Ordering::SeqCst),
             self.inner.total.load(Ordering::SeqCst)
@@ -154,19 +173,19 @@ impl ProgressTracker {
         self.inner.finished_with_error.load(Ordering::SeqCst)
     }
 
-    pub fn add_count(&self, count: u32) {
+    pub fn add_count(&self, count: usize) {
         self.inner.count.fetch_add(count, Ordering::SeqCst);
     }
 
-    pub fn set_count(&self, count: u32) {
+    pub fn set_count(&self, count: usize) {
         self.inner.count.store(count, Ordering::SeqCst);
     }
 
-    pub fn add_total(&self, total: u32) {
+    pub fn add_total(&self, total: usize) {
         self.inner.total.fetch_add(total, Ordering::SeqCst);
     }
 
-    pub fn set_total(&self, total: u32) {
+    pub fn set_total(&self, total: usize) {
         self.inner.total.store(total, Ordering::SeqCst);
     }
 

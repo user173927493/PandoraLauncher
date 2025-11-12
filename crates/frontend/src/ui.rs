@@ -3,10 +3,10 @@ use std::sync::Arc;
 use bridge::instance::InstanceID;
 use gpui::{prelude::*, *};
 use gpui_component::{
-    h_flex, resizable::{h_resizable, resizable_panel, ResizableState}, sidebar::{Sidebar, SidebarFooter, SidebarGroup, SidebarHeader, SidebarMenu, SidebarMenuItem}, v_flex, ActiveTheme as _, Icon, IconName
+    h_flex, resizable::{h_resizable, resizable_panel, ResizableState}, sidebar::{Sidebar, SidebarFooter, SidebarGroup, SidebarHeader, SidebarMenu, SidebarMenuItem}, v_flex, ActiveTheme as _, Icon
 };
 
-use crate::{entity::{instance::{InstanceAddedEvent, InstanceEntry, InstanceModifiedEvent}, DataEntities}, pages::{instance::instance_page::InstancePage, instances_page::InstancesPage, modrinth_page::ModrinthSearchPage}, png_render_cache};
+use crate::{entity::{instance::{InstanceAddedEvent, InstanceModifiedEvent, InstanceMovedToTopEvent, InstanceRemovedEvent}, DataEntities}, pages::{instance::instance_page::InstancePage, instances_page::InstancesPage, modrinth_page::ModrinthSearchPage}, png_render_cache};
 
 pub struct LauncherUI {
     data: DataEntities,
@@ -15,6 +15,8 @@ pub struct LauncherUI {
     recent_instances: heapless::Vec<(InstanceID, SharedString), 3>,
     _instance_added_subscription: Subscription,
     _instance_modified_subscription: Subscription,
+    _instance_removed_subscription: Subscription,
+    _instance_moved_to_top_subscription: Subscription,
 }
 
 #[derive(Clone)]
@@ -64,6 +66,21 @@ impl LauncherUI {
             }
             cx.notify();
         });
+        let _instance_removed_subscription = cx.subscribe_in::<_, InstanceRemovedEvent>(&data.instances, window, |this, _, event, window, cx| {
+            this.recent_instances.retain(|entry| entry.0 != event.id);
+            if let LauncherPage::InstancePage(id, _) = this.page && id == event.id {
+                this.switch_page(PageType::Instances, window, cx);
+            }
+            cx.notify();
+        });
+        let _instance_moved_to_top_subscription = cx.subscribe::<_, InstanceMovedToTopEvent>(&data.instances, |this, _, event, cx| {
+            this.recent_instances.retain(|entry| entry.0 != event.instance.id);
+            if this.recent_instances.is_full() {
+                this.recent_instances.pop();
+            }
+            let _ = this.recent_instances.insert(0, (event.instance.id, event.instance.name.clone()));
+            cx.notify();
+        });
         
         Self {
             data: data.clone(),
@@ -72,6 +89,8 @@ impl LauncherUI {
             recent_instances,
             _instance_added_subscription,
             _instance_modified_subscription,
+            _instance_removed_subscription,
+            _instance_moved_to_top_subscription,
         }
     }
 

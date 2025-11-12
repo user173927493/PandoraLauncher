@@ -1,4 +1,4 @@
-use std::{error::Error, sync::{atomic::{AtomicBool, Ordering}, Arc}};
+use std::sync::{atomic::{AtomicBool, Ordering}, Arc};
 
 use bridge::{handle::BackendHandle, message::MessageToBackend};
 use gpui::{AppContext, Entity};
