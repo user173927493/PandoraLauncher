@@ -40,6 +40,7 @@ pub struct ModrinthSearchPage {
     scroll_state: ScrollbarState,
     scroll_handle: UniformListScrollHandle,
     search_error: Option<SharedString>,
+    image_cache: Entity<RetainAllImageCache>,
 }
 
 impl ModrinthSearchPage {
@@ -73,6 +74,7 @@ impl ModrinthSearchPage {
             scroll_state: ScrollbarState::default(),
             scroll_handle: UniformListScrollHandle::new(),
             search_error: None,
+            image_cache: RetainAllImageCache::new(cx),
         };
         page.load_more(cx);
         page
@@ -422,6 +424,7 @@ impl Render for ModrinthSearchPage {
         let item_count = self.hits.len() + if can_load_more || self.search_error.is_some() { 1 } else { 0 };
 
         let list = h_flex()
+            .image_cache(self.image_cache.clone())
             .size_full()
             .overflow_y_hidden()
             .child(
