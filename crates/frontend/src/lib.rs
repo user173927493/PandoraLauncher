@@ -201,3 +201,15 @@ pub(crate) fn is_single_component_path(path: &str) -> bool {
 pub(crate) fn labelled(label: &'static str, element: impl IntoElement) -> Div {
     gpui_component::v_flex().gap_0p5().child(div().text_sm().font_medium().child(label)).child(element)
 }
+
+pub(crate) fn open_folder(path: &Path, window: &mut Window, cx: &mut App) {
+    if path.is_dir() {
+        if let Err(err) = open::that_detached(path) {
+            let notification: Notification = (NotificationType::Error, SharedString::from(format!("Unable to open folder: {err}"))).into();
+            window.push_notification(notification.autohide(false), cx);
+        }
+    } else {
+        let notification: Notification = (NotificationType::Error, SharedString::from("Unable to open folder: not a directory")).into();
+        window.push_notification(notification.autohide(false), cx);
+    }
+}

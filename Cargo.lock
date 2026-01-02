@@ -2399,6 +2399,7 @@ dependencies = [
  "lexical-sort",
  "lru",
  "once_cell",
+ "open",
  "rand 0.8.5",
  "reqwest_client",
  "rust-embed",

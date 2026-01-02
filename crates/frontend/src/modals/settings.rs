@@ -77,8 +77,8 @@ impl Render for Settings {
             ))
             .child(Button::new("open-theme-folder").success().label("Open theme folder").on_click({
                 let theme_folder = self.theme_folder.clone();
-                move |_, _, cx| {
-                    cx.reveal_path(&theme_folder);
+                move |_, window, cx| {
+                    crate::open_folder(&theme_folder, window, cx);
                 }
             }))
             .child(Button::new("open-theme-repo").success().label("Open theme repository").on_click({
