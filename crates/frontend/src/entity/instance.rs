@@ -40,7 +40,7 @@ impl InstanceEntries {
                 mods: cx.new(|_| [].into()),
             };
 
-            entries.entries.insert(id, cx.new(|_| instance.clone()));
+            entries.entries.insert_before(0, id, cx.new(|_| instance.clone()));
             cx.emit(InstanceAddedEvent { instance });
         });
     }
@@ -147,8 +147,8 @@ impl InstanceEntries {
     pub fn move_to_top(entity: &Entity<Self>, id: InstanceID, cx: &mut App) {
         entity.update(cx, |entries, cx| {
             if let Some(index) = entries.entries.get_index_of(&id) {
-                entries.entries.move_index(index, entries.entries.len() - 1);
-                let (_, entry) = entries.entries.get_index(entries.entries.len() - 1).unwrap();
+                entries.entries.move_index(index, 0);
+                let (_, entry) = entries.entries.get_index(0).unwrap();
                 cx.emit(InstanceMovedToTopEvent {
                     instance: entry.read(cx).clone(),
                 });
