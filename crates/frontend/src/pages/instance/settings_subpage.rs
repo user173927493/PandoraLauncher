@@ -45,20 +45,15 @@ impl InstanceSettingsSubpage {
         let entry = instance.read(cx);
         let instance_id = entry.id;
 
-        let memory_override_enabled = entry.configuration.memory.is_some();
-        let (min_mem, max_mem) = if let Some(memory) = &entry.configuration.memory {
-            (memory.min, memory.max)
-        } else {
-            (512, 4096)
-        };
+        let memory = entry.configuration.memory.unwrap_or_default();
 
         let memory_min_input_state = cx.new(|cx| {
-            InputState::new(window, cx).default_value(min_mem.to_string())
+            InputState::new(window, cx).default_value(memory.min.to_string())
         });
         cx.subscribe_in(&memory_min_input_state, window, Self::on_memory_step).detach();
         cx.subscribe(&memory_min_input_state, Self::on_memory_changed).detach();
         let memory_max_input_state = cx.new(|cx| {
-            InputState::new(window, cx).default_value(max_mem.to_string())
+            InputState::new(window, cx).default_value(memory.max.to_string())
         });
         cx.subscribe_in(&memory_max_input_state, window, Self::on_memory_step).detach();
         cx.subscribe(&memory_max_input_state, Self::on_memory_changed).detach();
@@ -67,7 +62,7 @@ impl InstanceSettingsSubpage {
             instance: instance.clone(),
             instance_id,
             new_name_input_state,
-            memory_override_enabled,
+            memory_override_enabled: memory.enabled,
             memory_min_input_state,
             memory_max_input_state,
             new_name_change_state: NewNameChangeState::NoChange,
@@ -141,10 +136,6 @@ impl InstanceSettingsSubpage {
         cx: &mut Context<Self>,
     ) {
         if let InputEvent::Change = event {
-            if !self.memory_override_enabled {
-                return;
-            }
-
             self.backend_handle.send(MessageToBackend::SetInstanceMemory {
                 id: self.instance_id,
                 memory: self.get_memory_configuration(cx)
@@ -152,15 +143,15 @@ impl InstanceSettingsSubpage {
         }
     }
 
-    fn get_memory_configuration(&self, cx: &App) -> Option<InstanceMemoryConfiguration> {
-        if !self.memory_override_enabled {
-            return None;
+    fn get_memory_configuration(&self, cx: &App) -> InstanceMemoryConfiguration {
+        let min = self.memory_min_input_state.read(cx).value().parse::<u32>().unwrap_or(0);
+        let max = self.memory_max_input_state.read(cx).value().parse::<u32>().unwrap_or(0);
+
+        InstanceMemoryConfiguration {
+            enabled: self.memory_override_enabled,
+            min,
+            max
         }
-
-        let min = self.memory_min_input_state.read(cx).value().parse::<u32>().ok()?;
-        let max = self.memory_max_input_state.read(cx).value().parse::<u32>().ok()?;
-
-        Some(InstanceMemoryConfiguration { min, max })
     }
 }
 
@@ -207,7 +198,7 @@ impl Render for InstanceSettingsSubpage {
             )
             .child(v_flex()
                 .gap_1()
-                .child(Checkbox::new("memory").label("Memory").checked(memory_override_enabled).on_click(cx.listener(|page, value, _, cx| {
+                .child(Checkbox::new("memory").label("Set Memory").checked(memory_override_enabled).on_click(cx.listener(|page, value, _, cx| {
                     if page.memory_override_enabled != *value {
                         page.memory_override_enabled = *value;
                         page.backend_handle.send(MessageToBackend::SetInstanceMemory {

@@ -1414,9 +1414,9 @@ impl LaunchContext {
             command.arg(log_configuration);
         }
 
-        if let Some(memory) = &self.configuration.memory {
+        if let Some(memory) = &self.configuration.memory && memory.enabled {
             command.arg(format!("-Xms{}m", memory.min));
-            command.arg(format!("-Xmx{}m", memory.max));
+            command.arg(format!("-Xmx{}m", memory.max.max(memory.min).max(128)));
         }
 
         command.arg("com.moulberry.pandora.LaunchWrapper");

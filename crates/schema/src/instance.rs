@@ -7,12 +7,38 @@ use crate::loader::Loader;
 pub struct InstanceConfiguration {
     pub minecraft_version: Ustr,
     pub loader: Loader,
-    #[serde(default, deserialize_with = "crate::try_deserialize", skip_serializing_if = "Option::is_none")]
+    #[serde(default, deserialize_with = "crate::try_deserialize", skip_serializing_if = "is_default_memory_configuration")]
     pub memory: Option<InstanceMemoryConfiguration>
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Copy, Clone)]
 pub struct InstanceMemoryConfiguration {
+    pub enabled: bool,
     pub min: u32,
     pub max: u32,
+}
+
+impl InstanceMemoryConfiguration {
+    pub const DEFAULT_MIN: u32 = 512;
+    pub const DEFAULT_MAX: u32 = 4096;
+}
+
+impl Default for InstanceMemoryConfiguration {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            min: Self::DEFAULT_MIN,
+            max: Self::DEFAULT_MAX
+        }
+    }
+}
+
+fn is_default_memory_configuration(config: &Option<InstanceMemoryConfiguration>) -> bool {
+    if let Some(config) = config {
+        !config.enabled &&
+            config.min == InstanceMemoryConfiguration::DEFAULT_MIN &&
+            config.max == InstanceMemoryConfiguration::DEFAULT_MAX
+    } else {
+        true
+    }
 }

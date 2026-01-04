@@ -68,7 +68,7 @@ impl BackendState {
             MessageToBackend::SetInstanceMemory { id, memory } => {
                 if let Some(instance) = self.instance_state.write().instances.get_mut(id) {
                     instance.configuration.modify(|configuration| {
-                        configuration.memory = memory;
+                        configuration.memory = Some(memory);
                     });
                 }
             },

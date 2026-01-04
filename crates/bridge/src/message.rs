@@ -31,7 +31,7 @@ pub enum MessageToBackend {
     },
     SetInstanceMemory {
         id: InstanceID,
-        memory: Option<InstanceMemoryConfiguration>,
+        memory: InstanceMemoryConfiguration,
     },
     KillInstance {
         id: InstanceID,
