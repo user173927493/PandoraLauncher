@@ -10,6 +10,8 @@ use rustc_hash::FxBuildHasher;
 
 use bridge::{game_output::GameOutputLogLevel, keep_alive::KeepAlive};
 
+use crate::CloseWindow;
+
 struct CachedShapedLogLevels {
     fatal: Arc<ShapedLine>,
     error: Arc<ShapedLine>,
@@ -829,6 +831,7 @@ pub struct GameOutputRoot {
     search_state: Entity<InputState>,
     _search_task: Task<()>,
     _search_input_subscription: Subscription,
+    focus_handle: FocusHandle,
 }
 
 #[derive(Clone)]
@@ -945,6 +948,9 @@ impl GameOutputRoot {
 
         let _search_input_subscription = cx.subscribe_in(&search_state, window, Self::on_search_input_event);
 
+        let focus_handle = cx.focus_handle();
+        focus_handle.focus(window, cx);
+
         Self {
             scroll_handler: ScrollHandler { state: scroll_state },
             _keep_alive: keep_alive,
@@ -952,6 +958,7 @@ impl GameOutputRoot {
             search_state,
             _search_task: Task::ready(()),
             _search_input_subscription,
+            focus_handle,
         }
     }
 
@@ -1104,5 +1111,9 @@ impl Render for GameOutputRoot {
                     cx.notify();
                 }
             }))
+            .track_focus(&self.focus_handle)
+            .on_action(|_: &CloseWindow, window, _| {
+                window.remove_window();
+            })
     }
 }

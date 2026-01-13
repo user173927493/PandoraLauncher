@@ -10,7 +10,7 @@ use bridge::{
 use gpui::{prelude::*, *};
 use gpui_component::{breadcrumb::Breadcrumb, scroll::{ScrollableElement, ScrollbarAxis}, v_flex, Root, StyledExt};
 
-use crate::{MAIN_FONT, entity::DataEntities, modals, ui::{LauncherUI, PageType}};
+use crate::{entity::DataEntities, modals, ui::{LauncherUI, PageType}, CloseWindow, MAIN_FONT};
 
 pub struct LauncherRootGlobal {
     pub root: Entity<LauncherRoot>,
@@ -23,6 +23,7 @@ pub struct LauncherRoot {
     pub panic_message: Arc<RwLock<Option<String>>>,
     pub deadlock_message: Arc<RwLock<Option<String>>>,
     pub backend_handle: BackendHandle,
+    focus_handle: FocusHandle,
 }
 
 impl LauncherRoot {
@@ -35,18 +36,21 @@ impl LauncherRoot {
     ) -> Self {
         let launcher_ui = cx.new(|cx| LauncherUI::new(data, window, cx));
 
+        let focus_handle = cx.focus_handle();
+        focus_handle.focus(window, cx);
+
         Self {
             ui: launcher_ui,
             panic_message,
             deadlock_message,
             backend_handle: data.backend_handle.clone(),
+            focus_handle,
         }
     }
 }
 
 impl Render for LauncherRoot {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-
         if let Some(message) = &*self.deadlock_message.read().unwrap() {
             let purple = Hsla {
                 h: 0.8333333333,
@@ -77,6 +81,10 @@ impl Render for LauncherRoot {
             .children(sheet_layer)
             .children(dialog_layer)
             .children(notification_layer)
+            .track_focus(&self.focus_handle)
+            .on_action(|_: &CloseWindow, window, _| {
+                window.remove_window();
+            })
             .into_any_element()
     }
 }

@@ -67,6 +67,8 @@ pub const MAIN_FONT: &'static str = "Inter 24pt 24pt";
 #[cfg(not(windows))]
 pub const MAIN_FONT: &'static str = "Inter 24pt";
 
+actions!([Quit, CloseWindow]);
+
 pub fn start(
     launcher_dir: PathBuf,
     panic_message: Arc<RwLock<Option<String>>>,
@@ -121,6 +123,15 @@ pub fn start(
                 cx.quit();
             }
         }).detach();
+
+        cx.bind_keys([
+            KeyBinding::new("secondary-q", Quit, None),
+            KeyBinding::new("secondary-w", CloseWindow, None),
+        ]);
+
+        cx.on_action(|_: &Quit, cx| {
+            cx.quit();
+        });
 
         cx.open_window(
             WindowOptions {
