@@ -879,6 +879,16 @@ impl BackendState {
                     account_info.selected_account = Some(uuid);
                 });
             },
+            MessageToBackend::DeleteAccount { uuid } => {
+                let mut account_info = self.account_info.write();
+
+                account_info.modify(|account_info| {
+                    account_info.accounts.remove(&uuid);
+                    if account_info.selected_account == Some(uuid) {
+                        account_info.selected_account = None;
+                    }
+                });
+            },
             MessageToBackend::SetOpenGameOutputAfterLaunching { value } => {
                 self.config.write().modify(|config| {
                     config.open_game_output_when_launching = value;

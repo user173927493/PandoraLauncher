@@ -120,6 +120,9 @@ pub enum MessageToBackend {
     SelectAccount {
         uuid: Uuid,
     },
+    DeleteAccount {
+        uuid: Uuid,
+    },
     SetOpenGameOutputAfterLaunching {
         value: bool,
     },

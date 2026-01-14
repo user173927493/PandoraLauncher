@@ -321,6 +321,8 @@ impl Render for LauncherUI {
                             (accounts.accounts.clone(), accounts.selected_account_uuid)
                         };
 
+                        let trash_icon = Icon::default().path("icons/trash-2.svg");
+
                         let items = accounts.iter().map(|account| {
                             let head = if let Some(head) = &account.head {
                                 let resize = png_render_cache::ImageTransformation::Resize { width: 32, height: 32 };
@@ -332,22 +334,39 @@ impl Render for LauncherUI {
 
                             let selected = Some(account.uuid) == selected_account;
 
-                            Button::new(account_name.clone())
-                                .when(selected, |this| {
-                                    this.info()
-                                })
-                                .h_10()
-                                .child(head.size_8().min_w_8().min_h_8())
-                                .child(account_name)
-                                .when(!selected, |this| {
-                                    this.on_click({
+                            h_flex()
+                                .gap_2()
+                                .w_full()
+                                .child(Button::new(account_name.clone())
+                                    .flex_grow()
+                                    .when(selected, |this| {
+                                        this.info()
+                                    })
+                                    .h_10()
+                                    .child(head.size_8().min_w_8().min_h_8())
+                                    .child(account_name.clone())
+                                    .when(!selected, |this| {
+                                        this.on_click({
+                                            let backend_handle = backend_handle.clone();
+                                            let uuid = account.uuid;
+                                            move |_, _, _| {
+                                                backend_handle.send(MessageToBackend::SelectAccount { uuid });
+                                            }
+                                        })
+                                    }))
+                                .child(Button::new((account_name.clone(), 1))
+                                    .icon(trash_icon.clone())
+                                    .h_10()
+                                    .w_10()
+                                    .danger()
+                                    .on_click({
                                         let backend_handle = backend_handle.clone();
                                         let uuid = account.uuid;
                                         move |_, _, _| {
-                                            backend_handle.send(MessageToBackend::SelectAccount { uuid });
+                                            backend_handle.send(MessageToBackend::DeleteAccount { uuid });
                                         }
-                                    })
-                                })
+                                    }))
+
                         });
 
                         sheet
