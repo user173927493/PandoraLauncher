@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use serde::Deserialize;
+use ustr::Ustr;
 
 
 #[derive(Debug, Deserialize)]
@@ -25,5 +26,5 @@ pub struct MavenMetadataVersioning {
 #[derive(Debug, Deserialize)]
 pub struct MavenMetadataVersions {
     #[serde(rename = "version")]
-    pub version: Arc<[Arc<str>]>,
+    pub version: Arc<[Ustr]>,
 }

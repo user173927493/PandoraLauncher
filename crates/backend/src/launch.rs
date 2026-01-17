@@ -11,7 +11,7 @@ use rc_zip_sync::ReadZip;
 use regex::Regex;
 use rustc_hash::FxHashMap;
 use schema::{
-    assets_index::AssetsIndex, fabric_launch::FabricLaunch, forge::{ForgeInstallProfile, ForgeSide}, instance::InstanceConfiguration, java_runtime_component::{JavaRuntimeComponentFile, JavaRuntimeComponentManifest}, loader::Loader, maven::MavenMetadataXml, version::{
+    assets_index::AssetsIndex, fabric_launch::FabricLaunch, forge::{ForgeInstallProfile, ForgeSide, VersionFragment}, instance::InstanceConfiguration, java_runtime_component::{JavaRuntimeComponentFile, JavaRuntimeComponentManifest}, loader::Loader, maven::MavenMetadataXml, version::{
         GameLibrary, GameLibraryArtifact, GameLibraryDownloads, GameLibraryExtractOptions, GameLogging, LaunchArgument, LaunchArgumentValue, MinecraftVersion, OsArch, OsName, PartialMinecraftVersion, Rule, RuleAction
     }, version_manifest::MinecraftVersionManifest
 };
@@ -58,6 +58,8 @@ pub enum LaunchError {
     ForgePostProcessorError,
     #[error("Cancelled by user")]
     CancelledByUser,
+    #[error("Loader supports the wrong version of Minecraft: {0}")]
+    MismatchedLoaderVersions(Arc<str>),
 }
 
 #[derive(PartialEq, Eq)]
@@ -257,7 +259,19 @@ impl Launcher {
             Loader::Fabric => {
                 let versions = self.meta.fetch(&MinecraftVersionManifestMetadataItem).map_err(LaunchError::from);
 
-                let fabric_loader_versions = self.meta.fetch(&FabricLoaderManifestMetadataItem).map_err(LaunchError::from);
+                let fabric_loader_version = async move {
+                    if let Some(preferred_version) = instance_info.preferred_loader_version {
+                        Ok(preferred_version)
+                    } else {
+                        let manifest = self.meta.fetch(&FabricLoaderManifestMetadataItem).map_err(LaunchError::from).await?;
+
+                        let mut latest_loader_version = manifest.0.iter().find(|v| v.stable);
+                        if latest_loader_version.is_none() {
+                            latest_loader_version = manifest.0.first();
+                        }
+                        Ok(latest_loader_version.unwrap().version)
+                    }
+                };
 
                 launch_tracker.add_total(4);
                 launch_tracker.notify();
@@ -265,18 +279,13 @@ impl Launcher {
                 let launch_tracker2 = launch_tracker.clone();
                 let meta2 = Arc::clone(&self.meta);
                 let minecraft_version = instance_info.minecraft_version;
-                let fabric_launch = fabric_loader_versions.and_then(async move |loader_manifest| {
+                let fabric_launch = fabric_loader_version.and_then(async move |loader_version| {
                     launch_tracker2.add_count(1);
                     launch_tracker2.notify();
 
-                    let mut latest_loader_version = loader_manifest.0.iter().find(|v| v.stable);
-                    if latest_loader_version.is_none() {
-                        latest_loader_version = loader_manifest.0.first();
-                    }
-
                     let value = meta2.fetch(&FabricLaunchMetadataItem {
                         minecraft_version,
-                        loader_version: latest_loader_version.unwrap().version,
+                        loader_version,
                     }).await?;
 
                     launch_tracker2.add_count(1);
@@ -386,7 +395,7 @@ impl Launcher {
 
                 self.create_forgelike_launch_version(http_client, progress_trackers, launch_tracker, instance_info,
                     minecraft_versions,
-                    loader_versions,
+                    &loader_versions.0,
                     "https://maven.minecraftforge.net/net/minecraftforge/forge/{0}/forge-{0}-installer.jar.sha1",
                     "net/minecraftforge/forge/{0}/forge-{0}-installer.jar",
                     "https://maven.minecraftforge.net/net/minecraftforge/forge/{0}/forge-{0}-installer.jar",
@@ -406,7 +415,7 @@ impl Launcher {
 
                 self.create_forgelike_launch_version(http_client, progress_trackers, launch_tracker, instance_info,
                     minecraft_versions,
-                    loader_versions,
+                    &loader_versions.0,
                     "https://maven.neoforged.net/releases/net/neoforged/neoforge/{0}/neoforge-{0}-installer.jar.sha1",
                     "net/neoforged/neoforge/{0}/neoforge-{0}-installer.jar",
                     "https://maven.neoforged.net/releases/net/neoforged/neoforge/{0}/neoforge-{0}-installer.jar",
@@ -425,7 +434,7 @@ impl Launcher {
         launch_tracker: &ProgressTracker,
         instance_info: &InstanceConfiguration,
         minecraft_versions: Arc<MinecraftVersionManifest>,
-        loader_versions: Arc<MavenMetadataXml>,
+        loader_versions: &[Ustr],
         installer_hash_url: &'static str,
         installer_path: &'static str,
         installer_url: &'static str,
@@ -439,42 +448,48 @@ impl Launcher {
             return Err(LaunchError::CantFindVersion(instance_info.minecraft_version.as_str()));
         };
 
-        let mut minecraft_version_parts = VersionFragment::string_to_parts(instance_info.minecraft_version.as_str());
-        if neoforge_versioning {
-            // 1.21.5 -> 21.5
-            // 25w14craftmine -> 0.25w14craftmine
-            // 1.21 -> 21.0
-            // 26.1 -> 26.1.0
-            if minecraft_version_parts[0] == VersionFragment::String("25w14craftmine".into()) {
-                minecraft_version_parts.insert(0, VersionFragment::Number(0))
-            } else {
-                if minecraft_version_parts.len() < 3 {
-                    minecraft_version_parts.push(VersionFragment::Number(0))
-                }
-                if minecraft_version_parts[0] == VersionFragment::Number(1) {
-                    minecraft_version_parts.remove(0);
-                }
-            }
-        }
-
-        let mut latest_loader_version = None;
-        let mut latest_loader_version_parts = Vec::new();
-        for version in loader_versions.versioning.versions.version.iter().rev() {
-            let parts = VersionFragment::string_to_parts(version);
-
-            if parts.starts_with(&minecraft_version_parts) {
-                if parts > latest_loader_version_parts {
-                    latest_loader_version_parts = parts;
-                    latest_loader_version = Some(version.clone());
+        let loader_version = if let Some(preferred_loader_version) = instance_info.preferred_loader_version {
+            preferred_loader_version
+        } else {
+            let mut minecraft_version_parts = VersionFragment::string_to_parts(instance_info.minecraft_version.as_str());
+            if neoforge_versioning {
+                // 1.21.5 -> 21.5
+                // 25w14craftmine -> 0.25w14craftmine
+                // 1.21 -> 21.0
+                // 26.1 -> 26.1.0
+                if minecraft_version_parts[0] == VersionFragment::String("25w14craftmine".into()) {
+                    minecraft_version_parts.insert(0, VersionFragment::Number(0))
+                } else {
+                    if minecraft_version_parts.len() < 3 {
+                        minecraft_version_parts.push(VersionFragment::Number(0))
+                    }
+                    if minecraft_version_parts[0] == VersionFragment::Number(1) {
+                        minecraft_version_parts.remove(0);
+                    }
                 }
             }
-        }
-        let Some(latest_loader_version) = latest_loader_version else {
-            return Err(LaunchError::CantFindVersion(instance_info.minecraft_version.as_str()));
+
+            let mut latest_loader_version = None;
+            let mut latest_loader_version_parts = Vec::new();
+            for version in loader_versions.iter() {
+                let parts = VersionFragment::string_to_parts(version);
+
+                if parts.starts_with(&minecraft_version_parts) {
+                    if parts > latest_loader_version_parts {
+                        latest_loader_version_parts = parts;
+                        latest_loader_version = Some(version.clone());
+                    }
+                }
+            }
+            let Some(latest_loader_version) = latest_loader_version else {
+                return Err(LaunchError::CantFindVersion(instance_info.minecraft_version.as_str()));
+            };
+
+            latest_loader_version
         };
 
         // Download base Minecraft version and neoforge installer hash
-        let installer_hash_url = installer_hash_url.replace("{0}", &latest_loader_version);
+        let installer_hash_url = installer_hash_url.replace("{0}", &loader_version);
         let (base_version, installer_sha1) = futures::future::join(
             self.meta.fetch(&MinecraftVersionMetadataItem(version_link)),
             Self::download_sha1(http_client, &installer_hash_url)
@@ -487,10 +502,10 @@ impl Launcher {
         // Download installer jar as an artifact
         let artifacts = &[
             GameLibraryArtifact {
-                path: installer_path.replace("{0}", &latest_loader_version).into(),
+                path: installer_path.replace("{0}", &loader_version).into(),
                 sha1: installer_sha1,
                 size: None,
-                url: installer_url.replace("{0}", &latest_loader_version).into(),
+                url: installer_url.replace("{0}", &loader_version).into(),
             },
             GameLibraryArtifact {
                 path: format!("net/minecraft/{0}/minecraft-client-{0}.jar", instance_info.minecraft_version).into(),
@@ -527,6 +542,10 @@ impl Launcher {
         };
 
         let install_profile: ForgeInstallProfile = serde_json::from_slice(&install_profile_file.bytes()?)?;
+
+        if &*install_profile.minecraft != instance_info.minecraft_version.as_str() {
+            return Err(LaunchError::MismatchedLoaderVersions(install_profile.minecraft.clone()));
+        }
 
         // Read partial minecraft version
         let mut version_file_name = &*install_profile.json;
@@ -1137,35 +1156,6 @@ impl Launcher {
         }
 
         None
-    }
-}
-
-#[derive(PartialEq, Eq, PartialOrd, Ord)]
-enum VersionFragment {
-    Alpha,
-    Beta,
-    Snapshot,
-    String(String),
-    Number(usize),
-}
-
-impl VersionFragment {
-    pub fn string_to_parts(version: &str) -> Vec<Self> {
-        version.split(&['.', '-', '+'])
-            .map(|v| {
-                if let Ok(number) = v.parse::<usize>() {
-                    VersionFragment::Number(number)
-                } else if v.eq_ignore_ascii_case("alpha") {
-                    VersionFragment::Alpha
-                } else if v.eq_ignore_ascii_case("beta") {
-                    VersionFragment::Beta
-                } else if v.eq_ignore_ascii_case("snapshot") {
-                    VersionFragment::Snapshot
-                } else {
-                    VersionFragment::String(v.into())
-                }
-            })
-            .collect::<Vec<_>>()
     }
 }
 

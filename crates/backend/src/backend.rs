@@ -946,6 +946,7 @@ impl BackendState {
         let instance_info = InstanceConfiguration {
             minecraft_version: Ustr::from(version),
             loader,
+            preferred_loader_version: None,
             memory: None,
             jvm_flags: None,
             jvm_binary: None,

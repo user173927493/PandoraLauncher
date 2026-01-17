@@ -33,6 +33,10 @@ pub enum MessageToBackend {
         id: InstanceID,
         loader: Loader
     },
+    SetInstancePreferredLoaderVersion {
+        id: InstanceID,
+        loader_version: Option<&'static str>
+    },
     SetInstanceMemory {
         id: InstanceID,
         memory: InstanceMemoryConfiguration,

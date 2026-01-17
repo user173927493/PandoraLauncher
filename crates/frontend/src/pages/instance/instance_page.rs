@@ -19,6 +19,7 @@ pub struct InstancePage {
     breadcrumb: Box<dyn Fn() -> Breadcrumb>,
     backend_handle: BackendHandle,
     title: SharedString,
+    data: DataEntities,
     instance: Entity<InstanceEntry>,
     subpage: InstanceSubpage,
     _instance_subscription: Subscription,
@@ -33,12 +34,13 @@ impl InstancePage {
             page.title = instance.title().into();
         });
 
-        let subpage = subpage.create(&instance, data.backend_handle.clone(), window, cx);
+        let subpage = subpage.create(&instance, data, data.backend_handle.clone(), window, cx);
 
         Self {
             breadcrumb,
             backend_handle: data.backend_handle.clone(),
             title: instance.read(cx).title().into(),
+            data: data.clone(),
             instance,
             subpage,
             _instance_subscription,
@@ -49,7 +51,7 @@ impl InstancePage {
         if page_type == self.subpage.page_type() {
             return;
         }
-        self.subpage = page_type.create(&self.instance, self.backend_handle.clone(), window, cx);
+        self.subpage = page_type.create(&self.instance, &self.data, self.backend_handle.clone(), window, cx);
     }
 }
 
@@ -141,6 +143,7 @@ impl InstanceSubpageType {
     pub fn create(
         self,
         instance: &Entity<InstanceEntry>,
+        data: &DataEntities,
         backend_handle: BackendHandle,
         window: &mut gpui::Window,
         cx: &mut App
@@ -156,7 +159,7 @@ impl InstanceSubpageType {
                 InstanceModsSubpage::new(instance, backend_handle, window, cx)
             })),
             InstanceSubpageType::Settings => InstanceSubpage::Settings(cx.new(|cx| {
-                InstanceSettingsSubpage::new(instance, backend_handle, window, cx)
+                InstanceSettingsSubpage::new(instance, data, backend_handle, window, cx)
             })),
         }
     }
