@@ -19,4 +19,4 @@ open.workspace = true
 native-dialog.workspace = true
 
 [build-dependencies]
-winres = "0.1.12"
+winresource = "0.1.29"
